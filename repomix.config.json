@@ -1,0 +1,52 @@
+{
+  "$schema": "https://repomix.com/schemas/repomix.config.schema.json",
+  "input": {
+    "maxFileSize": 52428800
+  },
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "filePathStyle": "target-relative",
+    "parsableStyle": false,
+    "headerText": "Lords Valley v0.1 — Phaser 4.2.1 + React 19 + Vite 8 + TypeScript 6. Colony-sim top-down. Este pack incluye src/context.md (índice) + 26 context.md distribuidos: 12 módulos principales en src/ (ai, app, assets, buildings, characters, combat, game, items, save, settlement, ui, world) + 13 submódulos anidados (game/scenes, game/systems, game/input, game/entities, game/events, game/world, ui/input, ui/menus, ui/character, ui/construction, ui/inventory, ui/orders, ui/settlement). Cada context.md explica propósito, archivos clave (con file:line), lógica, dependencias y flujo — usar como guía para IA antes de editar código.",
+    "fileSummary": true,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "compress": false,
+    "topFilesLength": 10,
+    "showLineNumbers": false,
+    "truncateBase64": true,
+    "copyToClipboard": false,
+    "includeEmptyDirectories": false,
+    "includeFullDirectoryStructure": false,
+    "git": {
+      "sortByChanges": false,
+      "includeDiffs": false,
+      "includeLogs": false,
+      "includeLogsCount": 50
+    }
+  },
+  "include": [],
+  "ignore": {
+    "useGitignore": true,
+    "useDotIgnore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "repomix-output.*",
+      "repomix-context.*",
+      "repomix-src.*",
+      "repomix-full.*",
+      ".claude/**",
+      "coverage/**",
+      ".repomix/**"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}
