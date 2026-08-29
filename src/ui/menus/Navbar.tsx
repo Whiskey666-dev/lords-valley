@@ -1,7 +1,7 @@
 import { getBinding, displayKey } from "../input/KeyBindings";
 
 interface Props {
-  onToggleTutorial?: () => void;
+  onOpenSettings?: () => void;
   zoom?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -13,7 +13,7 @@ interface Props {
  * Izquierda: Seguidores, Edificios | Centro: Construcción | Derecha: Misiones, Inventario, Mapa, Configuración
  * Escalable: añadir botón = añadir entrada en el array correspondiente.
  */
-export function Navbar({ onToggleTutorial, zoom = 1, onZoomIn, onZoomOut }: Props) {
+export function Navbar({ onOpenSettings, zoom = 1, onZoomIn, onZoomOut }: Props) {
   const handle = (action: string) => {
     const evt = `phaser-action-${action}`;
     window.dispatchEvent(new CustomEvent(evt));
@@ -118,7 +118,7 @@ export function Navbar({ onToggleTutorial, zoom = 1, onZoomIn, onZoomOut }: Prop
           return (
             <button
               key={b.id}
-              onClick={() => (isConfig && onToggleTutorial ? onToggleTutorial() : handle(b.id))}
+              onClick={() => (isConfig && onOpenSettings ? onOpenSettings() : handle(b.id))}
               style={{
                 ...btnBase,
                 background: isConfig ? "#1e2a33" : btnBase.background,

@@ -7,15 +7,16 @@ Contiene las **Scenes de Phaser** — el ciclo de vida `preload -> create -> upd
 | Archivo | Rol |
 |---|---|
 | `Preloader.ts:43` | `class Preloader extends Phaser.Scene` (`key: "Preloader"`). `preload()` carga 24 spritesheets 48x64 (Walk/Idle/Dash/Death/Jump x6 dirs) vía Vite imports. `create()` hace `scene.start("MainScene")`. |
-| `MainScene.ts:8` | `class MainScene extends Phaser.Scene` (`key: "MainScene"`). **312 líneas, corazón del juego.** Ver `game/context.md` para detalle completo: grid 2000x2000, `initAllCharacterAnimations`, spawn Player `getCenterSpawn()`, `spawnNpcs()`, cámara `startFollow` + zoom 0.6..1.6, listeners `phaser-*`/`wheel`, `showChatBubble`, `update()` (input blocking + `Player`/`Survivor` ticks + bubble follow). |
+| `MainScene.ts:12` | `class MainScene extends Phaser.Scene` (`key: "MainScene"`). **~127 líneas, orquesta** y delega en `game/systems/*`. Ver `game/context.md`. |
 
 ## Lógica
 - `Preloader` es la única scene que toca `assets/` — convierte URLs Vite a `Phaser.Textures`.
-- `MainScene` es donde todo converge: crea `characters/Player`, `characters/Survivor`, colisiones `arcade`, y puentea a `app/App` vía `window.CustomEvent`.
-- Verificación `verifyHumanAnimations` chequea 104 animaciones (walk/idle/jump/dash/death/attack x8 dirs x prefijos).
+- `MainScene` crea `Player`, `Survivor`, colisiones `arcade`, y delega cámara/spawn/chat/interacción a los sistemas de `game/systems/`.
+- Verificación `verifyHumanAnimations` chequea 104 animaciones.
+- Centrado de cámara manual por frame vía `CameraSystem.updateCamera` (sin lerp que causaba carga lenta del terreno).
 
 ## Dependencias
-- `Phaser`, `assets/*`, `characters/Animations`, `characters/Player`, `characters/Survivor`, `ui/input/KeyBindings`
+- `Phaser`, `assets/*`, `characters/Animations`, `characters/Player`, `characters/Survivor`, `ui/input/KeyBindings`, `game/systems/*`
 - Provee a `game/main.ts` (registro en `config.scene`)
 
 ## Para Repomix

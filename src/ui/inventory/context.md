@@ -1,18 +1,21 @@
-# ui/inventory / Context — UI de Inventario (Reservado)
+# ui/inventory / Context — UI de Inventario del Jugador
 
 ## Propósito
-Directorio **reservado vacío** para **UI avanzada de inventario** (grid, drag&drop, equipar). Hoy `ui/character/NpcPanel` ya muestra inventario/equipamiento en tabs, pero no permite interacción.
+Contiene la **UI del inventario del jugador**, que se abre con la tecla de inventario (`I`) y muestra los espacios de almacenamiento en cuadrícula, el equipo y un filtro desplegable por tipo de item.
 
-## Estado Actual
-> **Vacío.** `ui/character/NpcPanel.tsx:107` tab Inventario solo lista `Inventory.getResumen()` con `VISIBLE_LIMIT=4` + botón placeholder `Gestionar Inventario` dispatch.
+## Archivo
+- `PlayerInventoryPanel.tsx:32` — `function PlayerInventoryPanel({onClose})`.
 
-## Rol Previsto
-- `InventoryGrid.tsx` — grid `capacidad=20` con slots, drag&drop, tooltip `Item` peso/cantidad, `onDrop` -> `Inventory.add/remove`.
-- `EquipmentSlots.tsx` — 4 slots visuales `arma/armadura/herramienta/accesorio` con equip/unequip -> `Equipment` + `combat/Damage`.
-- `InventoryPanel.tsx` — panel full (similar a `NpcPanel` pero para `Player` global + `Settlement` stockpile).
+## Lógica — `PlayerInventoryPanel.tsx`
+- **Apertura** vía evento `phaser-action-inventory` (disparado por `MainScene.update` al pulsar `I`/botón Inventario). Al montar llama `setInventoryOpen(true)` para bloquear input de juego, y `setInventoryOpen(false)` al desmontar.
+- **Tamaño** fijo `right:0 top:32 bottom:0 width:285` idéntico a `NpcPanel`, borde `#4a90e2`.
+- **Equipado** (parte superior): 10 cuadros `Arma 1/Arma 2/Escudo/Casco/Pecho/Botas/Collar/Anillo/Consumible/Mochila` en `grid 10×1`.
+- **Filtro desplegable**: `<button>` que abre panel hacia abajo con `maxHeight:140` (5 opciones visibles + scroll vertical) de `Todos + 10 categorías` (`ALL_ITEM_CATEGORIES`). Cierra al seleccionar o click fuera (`data-inventory-filter`).
+- **Grid de almacenamiento**: `gridTemplateColumns repeat(10,1fr)` con **20 disponibles** (2 filas ×10, mapeadas con `filtered`) + **30 bloqueados opacos** (3 filas ×10, `🔒` "requiere mochila"). = 50 máx.
+- Items con `CATEGORY_ICON`, nombre recortado, `x{cantidad}`; scroll vertical `overflowY:auto`.
 
-## Dependencias Previstas
-- `items/Inventory`, `items/Equipment`, `items/Item`, `characters/Survivor`, `settlement/Economy`
+## Dependencias
+- `items/Item` (`ALL_ITEM_CATEGORIES`, `createMockPlayerInventory`, `ItemCategory`, `PlayerInventoryItem`), `ui/input/KeyBindings` (`setInventoryOpen`).
 
 ## Para Repomix
-Reusar `NpcPanel` tabs como base. No duplicar lógica de `Inventory` — el componente solo renderiza y despacha `onMoveItem`. Considerar `phaser-action-inventory` ya emitido en `MainScene.update` como trigger para abrir este panel.
+Reusar `CATEGORY_ICON`/`ITEM_POOLS` de `items/Item`. No duplicar lógica de `Inventory` — el componente solo renderiza y despacha. Al implementar mochila real: desbloquear los 30 slots bloqueados según progresión.

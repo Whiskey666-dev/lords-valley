@@ -1,14 +1,14 @@
 # items / Context — Inventario, Equipamiento y Objetos
 
 ## Propósito
-Gestiona **posesiones de cada humano** y el catálogo de objetos del mundo. Actualmente implementa inventario y equipamiento procedural con strings; los tipos base `Item`/`Resources`/`Weapons`/`Food` están en stub para evolucionar a objetos tipados.
+Gestiona **posesiones de cada humano** y el catálogo de objetos del mundo. Inventario y equipamiento procedural con strings; `Item.ts` define las categorías y el modelo tipado del inventario del jugador.
 
 ## Archivos
 | Archivo | Estado | Rol |
 |---|---|---|
-| `Inventory.ts:17` | Implementado | `class Inventory` con `capacidad=20`, generación procedural. |
-| `Equipment.ts:17` | Implementado | `class Equipment` con slots y generación procedural. |
-| `Item.ts` | Stub vacío | Base `Item { id, nombre, peso, stackable, categoria }` previsto. |
+| `Inventory.ts:17` | Implementado | `class Inventory` con `capacidad=20`, generación procedural (NPCs). |
+| `Equipment.ts:17` | Implementado | `class Equipment` con slots y generación procedural (NPCs). |
+| `Item.ts:1` | **Implementado** | Categorías `ItemCategory` (10), `PlayerInventoryItem`, `MAX_STACK`, `STACKABLE_CATEGORIES`, `ITEM_POOLS`, `createMockPlayerInventory()`. |
 | `Resources.ts` | Stub vacío | Registro recursos (madera, piedra, hierro) previsto. |
 | `Weapons.ts` | Stub vacío | Armas tipadas `Weapon { damage, range, durability }` (hoy strings en Equipment). |
 | `Food.ts` | Stub vacío | Comida consumible `Food { nutrition, decay, hambreRestore }` previsto. |
@@ -19,9 +19,7 @@ interface InventoryItem { id:string; nombre:string; cantidad:number; categoria:'
 class Inventory {
   items: InventoryItem[]; capacidad=20
   constructor() // 2..5 items random
-    pools: RECURSOS 5 ["Madera","Piedra","Hierro","Cuero","Tela"]
-           COMIDAS 5 ["Pan","Carne Seca","Manzana","Queso","Pescado"]
-           HERRAMIENTAS 4 ["Hacha","Pico","Martillo","Cuchillo"]
+    pools: RECURSOS 5 / COMIDAS 5 / HERRAMIENTAS 4
     dedup merge cantidad 1..8
   getResumen(): string[] // ["Madera x3", ...] para NpcPanel
 }
@@ -30,36 +28,32 @@ class Inventory {
 ## Lógica Implementada — `Equipment.ts:17`
 ```ts
 interface EquipmentSlot { arma?:string; armadura?:string; herramienta?:string; accesorio?:string }
-class Equipment {
-  slots: EquipmentSlot
-  pools: ARMAS 5 ["Espada Corta","Daga","Arco","Lanza","Maza"]
-         ARMADURAS 4 ["Túnica","Cuero","Cota de Malla","Placas"]
-         HERRAMIENTAS 4 [...]
-  constructor() // 0.7 chance arma, 0.6 armadura, 0.8 herramienta
-  getResumen(): string[] // ["Arma: Daga", ...] o ["Sin equipamiento"]
-}
+class Equipment { slots: EquipmentSlot; constructor() // 0.7/0.6/0.8 chance arma/armadura/herramienta; getResumen(): string[] }
 ```
-- Ambos usan strings hoy, no instancias `Item`. Suficiente para UI pero no para `combat/Damage` o `buildings/Production` que necesitarán stats numéricos.
+
+## Lógica Implementada — `Item.ts:1` (inventario del jugador)
+- **`ItemCategory`** (10): `Armas, Equipo, Consumibles Magicos, Consumibles Comunes, Comida y Bebida, Recurso Refinado, Recursos en Bruto, Utiles, Crias, Documentos` en `ALL_ITEM_CATEGORIES`.
+- **`PlayerInventoryItem`**: `{ id, nombre, categoria, cantidad, maxStack, stackable, peso?, descripcion?, icono? }`.
+- **Stacking**: `MAX_STACK = 10`; `STACKABLE_CATEGORIES` = Consumibles (Magicos/Comunes), Comida y Bebida, Recursos (Refinado/Bruto), Documentos. `isStackable()` / `maxStackFor()` devuelven `10` para stackeables y `1` para el resto (Armas, Equipo, Utiles, Crias).
+- **`ITEM_POOLS`**: nombres de items por categoría para mock.
+- **`createMockPlayerInventory()`**: genera 10-14 items; `cantidad` 1..10 en stackeables, 1 en no stackeables.
 
 ## Lógica Prevista (stubs)
-- `Item.ts` → clase base con `id, nombre, weight, stackable, maxStack, icon`
 - `Resources.ts` → `enum ResourceType { madera, piedra, hierro }` + `Resource extends Item`
 - `Weapons.ts` → `class Weapon extends Item { damage, range, speed, durability }` usado por `combat/Weapons.ts` + `combat/Damage.ts`
 - `Food.ts` → `class Food extends Item { hungerRestore, thirstRestore, spoilage }` consumido por `characters/Needs`
 
 ## Dependencias
-- **Consumido por:** `characters/Survivor.ts:42-43` (`inventory: Inventory`, `equipment: Equipment`), `ui/character/NpcPanel.tsx:108-163` (tabs inventario/equipamiento)
-- **Futuro consumidores:** `buildings/Production` (input/output), `settlement/Economy` (stockpiles), `combat/Damage` (weapon stats), `world/Events` (loot)
+- **Consumido por:** `characters/Survivor.ts` (`inventory`, `equipment`), `ui/character/NpcPanel.tsx`, `ui/inventory/PlayerInventoryPanel.tsx` (`createMockPlayerInventory`, `ALL_ITEM_CATEGORIES`, `CATEGORY_ICON`...)
+- **Futuro consumidores:** `buildings/Production`, `settlement/Economy`, `combat/Damage`, `world/Events`
 - **No depende de:** otros módulos (puro data)
 
 ## Flujo
 ```
-new Survivor() -> new Inventory() + new Equipment() // random
-  -> NpcPanel tab "Inventario" (VISIBLE_LIMIT 4, +N ocultos) / "Equipamiento"
-Futuro: Inventory.add/remove -> Economy.canAfford -> Construction.consume
-        Food.consume -> Needs.hambre -= restore
-        Weapon.equip -> CombatSystem damage calc
+new Survivor() -> new Inventory() + new Equipment() // random (NPCs)
+PlayerInventoryPanel -> createMockPlayerInventory() -> grid 20 disponibles + 30 bloqueados
+Futuro: Inventory.add/remove, Food.consume, Weapon.equip -> combat/Damage
 ```
 
 ## Para Repomix
-Para tipar el sistema: 1) implementar `Item.ts` base 2) migrar `InventoryItem` de `{nombre,cantidad}` a `Item` instancias 3) tipar `Equipment.slots` de `string` a `Weapon|Armor`. Mantener `getResumen()` para compat UI. `capacidad=20` es límite blando (no enforceado en `add` aún).
+Para tipar el sistema: 1) migrar `InventoryItem` de `{nombre,cantidad}` a `Item` instancias 2) tipar `Equipment.slots` a `Weapon|Armor`. Mantener `getResumen()` para compat UI. `MAX_STACK=10` como techo de stackeables.
