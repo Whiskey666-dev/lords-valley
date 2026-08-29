@@ -3,12 +3,10 @@ import { Survivor } from "../../characters/Survivor";
 
 /**
  * SpawnSystem.ts - Sistema de spawn modular.
- * Centraliza la lógica de posiciones aleatorias en radio 200 (20% alrededor de 1000,1000)
- * usada tanto por Player como por NPCs. Evita duplicar getCenterSpawn.
+ * Centraliza la lógica de posiciones aleatorias para Player y NPCs.
  */
 
 export function getCenterSpawn(_scene: Phaser.Scene): { x: number; y: number } {
-  // RTS overlay: centro dinámico según world bounds (6144 -> 3072, legacy 2000 -> 1000)
   const bounds = (_scene as any)?.physics?.world?.bounds;
   const worldW = bounds?.width ?? 6144;
   const center = worldW / 2;
@@ -21,6 +19,19 @@ export function getCenterSpawn(_scene: Phaser.Scene): { x: number; y: number } {
   };
 }
 
+export function getSpawnNearPlayer(
+  player: { x: number; y: number },
+  minRadius = 80,
+  maxRadius = 200
+): { x: number; y: number } {
+  const r = minRadius + (maxRadius - minRadius) * Math.sqrt(Math.random());
+  const angle = Math.random() * Math.PI * 2;
+  return {
+    x: Math.round(player.x + r * Math.cos(angle)),
+    y: Math.round(player.y + r * Math.sin(angle)),
+  };
+}
+
 export function spawnNpcs(
   scene: Phaser.Scene,
   count: number,
@@ -29,26 +40,32 @@ export function spawnNpcs(
 ): void {
   const clamped = Phaser.Math.Clamp(count, 1, 10);
   for (let i = 0; i < clamped; i++) {
-    let spawn = getCenterSpawn(scene);
+    let spawn = player ? getSpawnNearPlayer(player, 80, 220) : getCenterSpawn(scene);
     let attempts = 0;
     while (
-      (Phaser.Math.Distance.Between(spawn.x, spawn.y, player.x, player.y) < 60 ||
-        npcs.some(n => n.sprite && Phaser.Math.Distance.Between(spawn.x, spawn.y, n.sprite.x, n.sprite.y) < 60)) &&
-      attempts < 15
+      attempts < 15 &&
+      ((player && Phaser.Math.Distance.Between(spawn.x, spawn.y, player.x, player.y) < 60) ||
+        npcs.some(n => n.sprite && Phaser.Math.Distance.Between(spawn.x, spawn.y, n.sprite.x, n.sprite.y) < 50))
     ) {
-      spawn = getCenterSpawn(scene);
+      spawn = player ? getSpawnNearPlayer(player, 80, 220) : getCenterSpawn(scene);
       attempts++;
     }
+
     const surv = new Survivor();
     surv.instanciarSprite(scene, spawn.x, spawn.y);
     if (surv.sprite) {
-      scene.physics.add.collider(player as unknown as Phaser.Physics.Arcade.Sprite, surv.sprite);
+      if (player) {
+        scene.physics.add.collider(player as unknown as Phaser.Physics.Arcade.Sprite, surv.sprite);
+      }
       for (const other of npcs) {
-        if (other.sprite && surv.sprite) scene.physics.add.collider(other.sprite, surv.sprite);
+        if (other.sprite && surv.sprite) {
+          scene.physics.add.collider(other.sprite, surv.sprite);
+        }
       }
     }
     npcs.push(surv);
-    console.log(`[SpawnSystem] NPC ${surv.nombre} (${surv.profesion}) en ${spawn.x.toFixed(0)},${spawn.y.toFixed(0)}`);
+    console.log(`[SpawnSystem] NPC ${surv.nombre} (${surv.profesion}) generado en ${spawn.x},${spawn.y}`);
   }
+
   window.dispatchEvent(new CustomEvent("phaser-npcs-spawned", { detail: { count: clamped, total: npcs.length } }));
 }

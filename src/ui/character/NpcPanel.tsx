@@ -1,77 +1,81 @@
-import { useState } from "react";
+import { useNpcPanel, type NpcPanelData, type NpcTab } from "../../hooks/character/useNpcPanel";
+import { NpcStatusTab } from "./components/NpcStatusTab";
+import { NpcAttributesTab } from "./components/NpcAttributesTab";
+import { NpcProfessionsTab } from "./components/NpcProfessionsTab";
+import { NpcInventoryTab } from "./components/NpcInventoryTab";
 
-export interface NpcPanelData {
-  id: string;
-  name: string;
-  profession: string;
-  loyalty: number;
-  health: number;
-  edad?: number;
-  // core fields
-  firstName?: string;
-  lastName?: string;
-  gender?: string;
-  age?: number;
-  attributes?: { strength: number; agility: number; endurance: number; intelligence: number; charisma: number; perception: number };
-  professions?: { type: string; level: number; experience: string; specializations: string[] }[];
-  needs?: { hunger: number; thirst: number; fatigue: number; health: number; sanity: number; safety: number };
-  isLoyalAbsolute?: boolean;
-  lvyBalance?: string;
-  inventory?: { id: string; type: string; quantity: string; weight: number }[];
-  socialLinks?: { targetSurvivorId: string; type: string; affinity: number }[];
-  positionX?: number;
-  positionY?: number;
-  // mock fallback
-  traits?: string[];
-  personalidad?: string;
-  temperamento?: string;
-  habilidad?: string;
-  gustos?: string;
-  inventario?: string[];
-  equipamiento?: string[];
-  habilidades?: string[];
-  stats?: { salud: number; maxSalud: number; energia: number };
-}
+export type { NpcPanelData };
 
 interface Props {
   npc: NpcPanelData;
   onClose: () => void;
 }
 
+const TABS: { id: NpcTab; label: string }[] = [
+  { id: "estado", label: "Estado" },
+  { id: "atributos", label: "Atributos" },
+  { id: "profesiones", label: "Profesiones" },
+  { id: "inventario", label: "Inventario" },
+];
+
 export function NpcPanel({ npc, onClose }: Props) {
-  const [tab, setTab] = useState<"inventario" | "atributos" | "profesiones" | "estado">("estado");
-
-  const isCore = !!(npc.attributes || npc.professions || npc.needs);
-  const displayName = npc.name || `${npc.firstName ?? ''} ${npc.lastName ?? ''}`.trim() || "Desconocido";
-  const displayProfession = npc.profession || npc.professions?.[0]?.type || "—";
-  const displayLoyalty = npc.loyalty ?? 0;
-  const displayHealth = npc.health ?? npc.needs?.health ?? 0;
-  const maxHealth = 100;
-
-  const hunger = npc.needs?.hunger ?? (npc as any).needs?.hambre ?? 0;
-  const thirst = npc.needs?.thirst ?? (npc as any).needs?.sed ?? 0;
-  const fatigue = npc.needs?.fatigue ?? (npc as any).needs?.sueno ?? 0;
+  const {
+    tab,
+    setTab,
+    isCore,
+    displayName,
+    displayProfession,
+    displayLoyalty,
+    displayHealth,
+    maxHealth,
+    hunger,
+    thirst,
+    fatigue,
+    formattedLvy,
+  } = useNpcPanel(npc);
 
   return (
-    <div style={{ width: '285px', minWidth: '240px', maxWidth: '90vw', borderLeft: '2px solid #00ff88', backgroundColor: '#151515', boxSizing: 'border-box', overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px 16px 20px 16px' }}>
+    <div style={{
+      width: '285px',
+      minWidth: '240px',
+      maxWidth: '90vw',
+      borderLeft: '2px solid #00ff88',
+      backgroundColor: '#151515',
+      boxSizing: 'border-box',
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
+      zIndex: 100,
+      boxShadow: '-4px 0 24px #000000aa',
+      padding: '16px 16px 20px 16px',
+    }}>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: 8, flexShrink: 0 }}>
         <h2 style={{ margin: 0, fontSize: 14, color: '#ffd66b' }}>🏰 {displayName}</h2>
-        <button onClick={onClose} style={{ background: '#222', color: '#888', border: '1px solid #333', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>✕</button>
+        <button
+          onClick={onClose}
+          style={{ background: '#222', color: '#888', border: '1px solid #333', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}
+        >
+          ✕
+        </button>
       </div>
 
+      {/* Info General & Stats */}
       <div style={{ backgroundColor: '#1c1c1c', padding: 12, borderRadius: 8, border: '1px solid #2e2e2e', flexShrink: 0 }}>
-        <h3 style={{ color: '#6ab0ff', margin: '0 0 6px 0', fontSize: 13 }}>👤 {displayName} {npc.edad || npc.age ? <span style={{ color: '#777', fontWeight: 400, fontSize: 11 }}>({npc.edad ?? npc.age} años)</span> : null} {npc.gender ? <span style={{ color: '#999', fontSize: 10 }}> • {npc.gender}</span> : null}</h3>
+        <h3 style={{ color: '#6ab0ff', margin: '0 0 6px 0', fontSize: 13 }}>
+          👤 {displayName} {npc.edad || npc.age ? <span style={{ color: '#777', fontWeight: 400, fontSize: 11 }}>({npc.edad ?? npc.age} años)</span> : null} {npc.gender ? <span style={{ color: '#999', fontSize: 10 }}> • {npc.gender}</span> : null}
+        </h3>
         <div style={{ fontSize: 11, lineHeight: 1.4 }}>
           <div><strong>Profesión:</strong> {displayProfession} {isCore && npc.professions?.[0] ? <span style={{ color: '#8cf' }}>Lv{npc.professions[0].level}</span> : null}</div>
-          {(npc as any).isPlayer ? (
-            <>
-              <div><strong>Username:</strong> {(npc as any).username ?? displayName}</div>
-            </>
+          {npc.isPlayer ? (
+            <div><strong>Username:</strong> {npc.username ?? displayName}</div>
           ) : isCore ? (
             <>
               <div><strong>Lealtad:</strong> {displayLoyalty}% {npc.isLoyalAbsolute ? '★ ABSOLUTA' : ''}</div>
               <div><strong>Pos:</strong> {Math.round(npc.positionX ?? 0)},{Math.round(npc.positionY ?? 0)}</div>
-              {npc.lvyBalance && <div><strong>LVY:</strong> {(BigInt(npc.lvyBalance) / BigInt(10)**BigInt(18)).toString()}</div>}
+              {formattedLvy && <div><strong>LVY:</strong> {formattedLvy}</div>}
             </>
           ) : (
             <>
@@ -81,15 +85,25 @@ export function NpcPanel({ npc, onClose }: Props) {
             </>
           )}
         </div>
+
+        {/* Barras de Estado */}
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}><span>Lealtad</span><span style={{ color: displayLoyalty === 100 ? '#ffd700' : '#aaa' }}>{Math.min(100, displayLoyalty)}% {displayLoyalty === 100 ? '★' : ''}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+            <span>Lealtad</span>
+            <span style={{ color: displayLoyalty === 100 ? '#ffd700' : '#aaa' }}>{Math.min(100, displayLoyalty)}% {displayLoyalty === 100 ? '★' : ''}</span>
+          </div>
           <div style={{ width: '100%', background: '#2a2a2a', borderRadius: 4, height: 8, marginTop: 4, overflow: 'hidden' }}>
             <div style={{ width: `${Math.min(100, displayLoyalty)}%`, background: displayLoyalty === 100 ? '#ffd700' : '#4caf50', height: '100%', borderRadius: 4 }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 6 }}><span>Salud</span><span>{displayHealth}/{maxHealth} ({Math.round((displayHealth / maxHealth) * 100)}%)</span></div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 6 }}>
+            <span>Salud</span>
+            <span>{displayHealth}/{maxHealth} ({Math.round((displayHealth / maxHealth) * 100)}%)</span>
+          </div>
           <div style={{ width: '100%', background: '#2a2a2a', borderRadius: 4, height: 8, marginTop: 4, overflow: 'hidden' }}>
             <div style={{ width: `${Math.min(100, Math.round((displayHealth / maxHealth) * 100))}%`, background: displayHealth > 60 ? '#4caf50' : displayHealth > 20 ? '#ff9800' : '#e53935', height: '100%', borderRadius: 4 }} />
           </div>
+
           {isCore && (
             <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 10 }}>
               <div>Hambre {hunger}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${hunger}%`, background: hunger > 80 ? '#e53935' : '#ff9800', height: '100%' }} /></div></div>
@@ -101,75 +115,51 @@ export function NpcPanel({ npc, onClose }: Props) {
         </div>
       </div>
 
+      {/* Tabs Selector */}
       <div style={{ display: 'flex', gap: 6, width: '100%', overflow: 'hidden', flexShrink: 0 }}>
-        {[
-          { id: "estado" as const, label: "Estado" },
-          { id: "atributos" as const, label: "Atributos" },
-          { id: "profesiones" as const, label: "Profesiones" },
-          { id: "inventario" as const, label: "Inventario" },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: '1 1 0', minWidth: 0, padding: '6px 4px', borderRadius: 6, border: tab === t.id ? '1px solid #4a90e2' : '1px solid #333', background: tab === t.id ? '#1e2a3a' : '#1e1e1e', color: tab === t.id ? '#8ab4ff' : '#aaa', fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</button>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '6px 4px',
+              borderRadius: 6,
+              border: tab === t.id ? '1px solid #4a90e2' : '1px solid #333',
+              background: tab === t.id ? '#1e2a3a' : '#1e1e1e',
+              color: tab === t.id ? '#8ab4ff' : '#aaa',
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 10, flex: '0 1 auto', minHeight: 140, maxHeight: '42vh', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {tab === "estado" && (
-          <div style={{ fontSize: 11, lineHeight: 1.5 }}>
-            {(npc as any).isPlayer ? (
-              <>
-                <div><b>Username:</b> {(npc as any).username}</div>
-                <div><b>ID:</b> {(npc as any).id?.slice(0,8)}</div>
-              </>
-            ) : isCore ? (
-              <>
-                <div><b>Seguridad:</b> {npc.needs?.safety ?? 0}%</div>
-                <div><b>SocialLinks:</b> {npc.socialLinks?.length ?? 0} {npc.socialLinks?.map(s => `${s.type}→${s.targetSurvivorId.slice(0,4)}(${s.affinity})`).join(', ')}</div>
-              </>
-            ) : (
-              <div>{npc.personalidad && <div><b>Temperamento:</b> {npc.temperamento}</div>}{npc.gustos && <div><b>Gustos:</b> {npc.gustos}</div>}</div>
-            )}
-            {npc.needs && !isCore && !(npc as any).isPlayer && <div style={{ marginTop: 6, background: '#111', padding: 6, borderRadius: 6 }}>Hambre: {Math.round((npc.needs as any).hambre)} • Sed: {Math.round((npc.needs as any).sed)}</div>}
-          </div>
-        )}
-        {tab === "atributos" && (
-          <div>
-            {isCore && npc.attributes ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
-                {Object.entries(npc.attributes).map(([k, v]) => (
-                  <div key={k} style={{ background: '#222', padding: 6, borderRadius: 6, display: 'flex', justifyContent: 'space-between' }}><span style={{ textTransform: 'capitalize' }}>{k}</span><b style={{ color: '#8cf' }}>{v as number}</b></div>
-                ))}
-              </div>
-            ) : <div style={{ fontSize: 11, color: '#666' }}>Sin atributos core — es mock local. Usa survivors del settlement.</div>}
-          </div>
-        )}
-        {tab === "profesiones" && (
-          <div>
-            {isCore && npc.professions?.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {npc.professions.map((p, i) => (
-                  <div key={i} style={{ background: '#222', padding: 8, borderRadius: 6, fontSize: 11 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><b>{p.type}</b><span>Lv{p.level}</span></div>
-                    <div style={{ color: '#888' }}>XP: {(BigInt(p.experience) / BigInt(10)**BigInt(18)).toString()}</div>
-                    {p.specializations?.length ? <div style={{ color: '#666' }}>{p.specializations.join(', ')}</div> : null}
-                  </div>
-                ))}
-              </div>
-            ) : npc.habilidades ? <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>{npc.habilidades.map((h,i)=><li key={i}>{h}</li>)}</ul> : <div style={{ color: '#666', fontSize: 11 }}>Sin profesiones</div>}
-          </div>
-        )}
-        {tab === "inventario" && (
-          <div>
-            {isCore && npc.inventory?.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {npc.inventory.map((it) => (
-                  <div key={it.id} style={{ background: '#222', padding: 6, borderRadius: 6, fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{it.type}</span><span style={{ color: '#8cf' }}>{(BigInt(it.quantity)/BigInt(10)**BigInt(18)).toString()} <span style={{ color: '#666' }}>{it.weight}kg</span></span>
-                  </div>
-                ))}
-              </div>
-            ) : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 12, gap: 4, textAlign: 'center' }}><div style={{ fontSize: 20, opacity: 0.3 }}>📦</div><div style={{ fontSize: 11, color: '#666' }}>Inventario vacío / mock</div></div>}
-          </div>
-        )}
+      {/* Contenido del Tab Activo */}
+      <div style={{
+        background: '#1a1a1a',
+        border: '1px solid #2a2a2a',
+        borderRadius: 8,
+        padding: 10,
+        flex: '0 1 auto',
+        minHeight: 140,
+        maxHeight: '42vh',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {tab === "estado" && <NpcStatusTab npc={npc} isCore={isCore} />}
+        {tab === "atributos" && <NpcAttributesTab npc={npc} isCore={isCore} />}
+        {tab === "profesiones" && <NpcProfessionsTab npc={npc} isCore={isCore} />}
+        {tab === "inventario" && <NpcInventoryTab npc={npc} isCore={isCore} />}
       </div>
     </div>
   );

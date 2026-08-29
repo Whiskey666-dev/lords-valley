@@ -1,152 +1,334 @@
-import { useEffect, useRef, useState } from 'react';
-import { useGameStore } from '../../app/store/useGameStore';
-
-const WORLD_SIZE = 6144;
-const MINI_SIZE = 140;
-const SCALE = MINI_SIZE / WORLD_SIZE;
-
-function gidToColor(gid: number): string {
-  if (gid === 1) return '#2d5a27';
-  if (gid === 2) return '#8b7355';
-  if (gid === 5) return '#1a4d1a';
-  if (gid === 101) return '#5a5a5a';
-  if (gid === 102) return '#2e86ab';
-  return '#2d5a27';
-}
+import { useMiniMap } from "../../hooks/hud/useMiniMap";
+import { useWorldInfo } from "../../hooks/hud/useWorldInfo";
+import { WorldInfoPanel } from "./components/WorldInfoPanel";
 
 export function MiniMap() {
-  const chunks = useGameStore((s) => s.chunks);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [playerPos, setPlayerPos] = useState<{ x: number; y: number } | null>(null);
+  const {
+    canvasRef,
+    currentSize,
+    isExpanded,
+    miniZoom,
+    showMissions,
+    showAlerts,
+    toggleExpand,
+    toggleMissions,
+    toggleAlerts,
+    zoomIn,
+    zoomOut,
+    handleMiniMapClick,
+  } = useMiniMap();
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const p = (window as any).__PLAYER_POS__;
-      if (p && typeof p.x === 'number') setPlayerPos({ x: p.x, y: p.y });
-    }, 100);
-    return () => clearInterval(id);
-  }, []);
-
-  // Precarga todo el mundo 6x6 = 6144 para que no queden partes negras
-  useEffect(() => {
-    const { getChunk } = useGameStore.getState();
-    for (let x = 0; x < 6; x++) {
-      for (let y = 0; y < 6; y++) {
-        const key = `${x}:${y}`;
-        if (!useGameStore.getState().chunks.has(key)) {
-          getChunk(x, y).catch(() => {});
-        }
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, MINI_SIZE, MINI_SIZE);
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, MINI_SIZE, MINI_SIZE);
-
-    // Draw chunks real tiles scaled
-    for (const chunk of chunks.values() as any) {
-      const tiles: number[][] = chunk.tiles ?? [];
-      const baseX = chunk.chunkX * 1024 * SCALE;
-      const baseY = chunk.chunkY * 1024 * SCALE;
-      for (let y = 0; y < 32; y++) {
-        for (let x = 0; x < 32; x++) {
-          const gid = tiles[y]?.[x] ?? 1;
-          ctx.fillStyle = gidToColor(gid);
-          const px = baseX + x * 32 * SCALE;
-          const py = baseY + y * 32 * SCALE;
-          const s = Math.max(1, 32 * SCALE);
-          ctx.fillRect(px, py, s, s);
-        }
-      }
-      // resources tiny yellow
-      for (const r of (chunk.resources ?? [])) {
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.arc(r.posX * SCALE, r.posY * SCALE, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Survivors no se renderizan en minimapa — solo Player (core viene sin mock)
-    // Player dot
-    if (playerPos) {
-      ctx.fillStyle = '#ff3b30';
-      ctx.beginPath();
-      ctx.arc(playerPos.x * SCALE, playerPos.y * SCALE, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      // pulso
-      ctx.fillStyle = 'rgba(255,59,48,0.25)';
-      ctx.beginPath();
-      ctx.arc(playerPos.x * SCALE, playerPos.y * SCALE, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }, [chunks, playerPos]);
-
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const cx = e.clientX - rect.left - MINI_SIZE / 2;
-    const cy = e.clientY - rect.top - MINI_SIZE / 2;
-    // clamp to circle
-    const dist = Math.hypot(cx, cy);
-    if (dist > MINI_SIZE / 2) return;
-    const worldX = (e.clientX - rect.left) / MINI_SIZE * WORLD_SIZE;
-    const worldY = (e.clientY - rect.top) / MINI_SIZE * WORLD_SIZE;
-    // convertir a chunk para compatibilidad, pero también centerOn directo si está en modo libre
-    const chunkX = Math.floor(worldX / 1024);
-    const chunkY = Math.floor(worldY / 1024);
-    window.dispatchEvent(new CustomEvent('minimap-goto', { detail: { chunkX, chunkY } }));
-    // modo preciso: centerOn directo si MainScene escucha world
-    const cam = (window as any).__PHASER_CAMERA__ as Phaser.Cameras.Scene2D.Camera | undefined;
-    if (cam) cam.centerOn(worldX, worldY);
-    else {
-      // fallback directo via custom event world
-      window.dispatchEvent(new CustomEvent('minimap-goto-world', { detail: { x: worldX, y: worldY } }));
-    }
-  };
-
-  if (chunks.size === 0 && !playerPos) {
-    return (
-      <div style={{ position: 'absolute', bottom: 8, right: 8, zIndex: 15 }}>
-        <div onClick={handleClick} style={{ width: MINI_SIZE, height: MINI_SIZE, borderRadius: '50%', background: '#0a0a0a', border: '2px solid #444', overflow: 'hidden', position: 'relative', cursor: 'crosshair', boxShadow: '0 4px 12px #00000099' }}>
-          <canvas ref={canvasRef} width={MINI_SIZE} height={MINI_SIZE} style={{ width: MINI_SIZE, height: MINI_SIZE, display: 'block' }} />
-        </div>
-      </div>
-    );
-  }
+  const { isOpen, toggle, close, worldData } = useWorldInfo();
 
   return (
-    <div style={{ position: 'absolute', bottom: 8, right: 8, zIndex: 15, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <div
-        onClick={handleClick}
-        title="Click para mover cámara (modo libre Y)"
-        style={{
-          width: MINI_SIZE,
-          height: MINI_SIZE,
-          borderRadius: '50%',
-          background: '#000000',
-          border: '2px solid #555',
-          overflow: 'hidden',
-          position: 'relative',
-          cursor: 'crosshair',
-          boxShadow: '0 4px 16px #000000cc, inset 0 0 8px #000000',
-        }}
-      >
-        <canvas ref={canvasRef} width={MINI_SIZE} height={MINI_SIZE} style={{ width: MINI_SIZE, height: MINI_SIZE, display: 'block' }} />
-        {/* borde interior circular */}
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.08)', pointerEvents: 'none' }} />
-        {/* cruz centro */}
-        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 6, height: 1, background: 'rgba(255,255,255,0.15)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 1, height: 6, background: 'rgba(255,255,255,0.15)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        zIndex: 25,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        userSelect: 'none',
+      }}
+    >
+      {/* Panel flotante de fecha, hora, estación y clima */}
+      {isOpen && <WorldInfoPanel worldData={worldData} onClose={close} />}
+
+      {/* Contenedor flexible principal con botones laterales a la izquierda, minimapa en el centro y barra de zoom a la derecha */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* ── Botones de opciones a la izquierda del minimapa ── */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 5,
+            alignItems: 'center',
+          }}
+        >
+          {/* Botón: Expandir / Disminuir */}
+          <CircleBtn
+            title={isExpanded ? 'Reducir tamaño del minimapa' : 'Expandir minimapa local'}
+            active={isExpanded}
+            activeColor="#4a90e2"
+            onClick={toggleExpand}
+          >
+            {isExpanded ? '🗗' : '⛶'}
+          </CircleBtn>
+
+          {/* Botón: Misiones */}
+          <CircleBtn
+            title={showMissions ? 'Ocultar misiones del minimapa' : 'Mostrar misiones en el minimapa'}
+            active={showMissions}
+            activeColor="#ffcc00"
+            onClick={toggleMissions}
+          >
+            🎯
+          </CircleBtn>
+
+          {/* Botón: Alertas */}
+          <CircleBtn
+            title={showAlerts ? 'Ocultar alertas del minimapa' : 'Mostrar alertas en el minimapa'}
+            active={showAlerts}
+            activeColor="#ff4444"
+            onClick={toggleAlerts}
+          >
+            ⚠️
+          </CircleBtn>
+        </div>
+
+        {/* ── Contenedor del minimapa circular central ── */}
+        <div style={{ position: 'relative', width: currentSize, height: currentSize }}>
+          {/* Canvas circular */}
+          <div
+            onClick={handleMiniMapClick}
+            title="Click para centrar cámara"
+            style={{
+              width: currentSize,
+              height: currentSize,
+              borderRadius: '50%',
+              background: '#040b10',
+              border: '2px solid #334455',
+              overflow: 'hidden',
+              position: 'relative',
+              cursor: 'crosshair',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.85), inset 0 0 10px #000',
+              transition: 'width 0.2s ease, height 0.2s ease',
+            }}
+          >
+            <canvas
+              ref={canvasRef}
+              width={currentSize}
+              height={currentSize}
+              style={{
+                width: currentSize,
+                height: currentSize,
+                display: 'block',
+              }}
+            />
+
+            {/* Borde interior circular sutil */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                border: '1px solid rgba(255,255,255,0.08)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Cruz retícula centro */}
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: 8,
+                height: 1,
+                background: 'rgba(255,255,255,0.25)',
+                transform: 'translate(-50%,-50%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: 1,
+                height: 8,
+                background: 'rgba(255,255,255,0.25)',
+                transform: 'translate(-50%,-50%)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Indicador de escala / zoom en la parte inferior interior */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 6,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(0,0,0,0.65)',
+                padding: '1px 5px',
+                borderRadius: 4,
+                fontSize: 8,
+                fontFamily: 'monospace',
+                color: '#8ab4ff',
+                pointerEvents: 'none',
+                letterSpacing: 0.5,
+              }}
+            >
+              {miniZoom}x
+            </div>
+          </div>
+
+          {/* Botón superior derecho: Información de fecha / hora / clima */}
+          <button
+            data-world-info-panel
+            onClick={(e) => {
+              e.stopPropagation();
+              e.currentTarget.blur();
+              toggle();
+            }}
+            title="Fecha, Hora y Clima del juego"
+            style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              background: isOpen ? '#1e2d40' : '#141e28',
+              border: isOpen ? '1.5px solid #4a90e2' : '1.5px solid #2a3c50',
+              color: isOpen ? '#8ab4ff' : '#ccd',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.7)',
+              zIndex: 30,
+              transition: 'all 0.15s ease',
+              padding: 0,
+            }}
+          >
+            📅
+          </button>
+        </div>
+
+        {/* ── Barra vertical de zoom al lado derecho ── */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            background: '#0c1520',
+            border: '1px solid #1a2a3c',
+            borderRadius: 14,
+            padding: '3px 2px',
+            gap: 3,
+            boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+          }}
+        >
+          {/* Botón + */}
+          <button
+            onClick={zoomIn}
+            title="Aumentar zoom del minimapa"
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: '#162434',
+              border: '1px solid #243850',
+              color: miniZoom >= 4 ? '#445566' : '#8acfff',
+              fontSize: 13,
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: miniZoom >= 4 ? 'default' : 'pointer',
+              padding: 0,
+            }}
+          >
+            +
+          </button>
+
+          {/* Barra indicadora vertical de nivel de zoom */}
+          <div
+            style={{
+              width: 6,
+              height: 48,
+              background: '#060d14',
+              borderRadius: 3,
+              position: 'relative',
+              overflow: 'hidden',
+              border: '1px solid #142230',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: `${((miniZoom - 1) / 3) * 100}%`,
+                minHeight: 4,
+                background: 'linear-gradient(to top, #2e86ab, #00e5ff)',
+                borderRadius: 2,
+                transition: 'height 0.15s ease',
+              }}
+            />
+          </div>
+
+          {/* Botón − */}
+          <button
+            onClick={zoomOut}
+            title="Reducir zoom del minimapa"
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: '#162434',
+              border: '1px solid #243850',
+              color: miniZoom <= 1 ? '#445566' : '#8acfff',
+              fontSize: 13,
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: miniZoom <= 1 ? 'default' : 'pointer',
+              padding: 0,
+            }}
+          >
+            −
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+function CircleBtn({
+  children,
+  onClick,
+  title,
+  active = false,
+  activeColor = '#4a90e2',
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  title: string;
+  active?: boolean;
+  activeColor?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        width: 26,
+        height: 26,
+        borderRadius: '50%',
+        background: active ? '#142436' : '#0e1622',
+        border: `1.5px solid ${active ? activeColor : '#1e2c3e'}`,
+        color: active ? activeColor : '#7a8e9e',
+        fontSize: 11,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        boxShadow: active ? `0 0 8px ${activeColor}44` : '0 2px 6px rgba(0,0,0,0.5)',
+        transition: 'all 0.15s ease',
+        padding: 0,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export default MiniMap;

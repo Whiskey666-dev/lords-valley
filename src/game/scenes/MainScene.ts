@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import { Player } from "../../characters/Player";
+import { Survivor } from "../../characters/Survivor";
 import { initAllCharacterAnimations } from "../../characters/Animations";
-import { getBinding, displayKey, isGameInputBlocked, isActionJustDown } from "../../ui/input/KeyBindings";
+import { isGameInputBlocked, isActionJustDown } from "../../ui/input/KeyBindings";
 import * as InputSystem from "../systems/InputSystem";
 import { setupCamera, updateCamera } from "../systems/CameraSystem";
-import { getCenterSpawn } from "../systems/SpawnSystem";
+import { getCenterSpawn, spawnNpcs } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { ChunkRenderer } from "../entities/ChunkRenderer";
 import { CameraController } from "../systems/CameraController";
@@ -13,6 +14,7 @@ import { useGameStore } from "../../app/store/useGameStore";
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
+  private npcs: Survivor[] = [];
   private chatSystem!: ChatBubbleSystem;
   private chunkRenderer!: ChunkRenderer;
   private cameraController!: CameraController;
@@ -25,10 +27,48 @@ export class MainScene extends Phaser.Scene {
     initAllCharacterAnimations(this);
     this.verifyHumanAnimations();
     this.spawnPlayer();
+    this.setupNpcListeners();
     this.chatSystem = new ChatBubbleSystem(this);
     setupCamera(this, this.player, 6144, 6144);
     this.setupRTSOverlay();
     this.setupDebug();
+  }
+
+  private setupNpcListeners(): void {
+    const onSpawnRequest = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number }>).detail;
+      const count = detail?.count ?? 1;
+      spawnNpcs(this, count, this.player, this.npcs);
+    };
+
+    const onFocusNpc = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string; x?: number; y?: number }>).detail;
+      if (!detail) return;
+      const target = this.npcs.find(n => n.id === detail.id);
+      if (target && target.sprite) {
+        if (this.cameraFollow) {
+          this.cameraFollow = false;
+          this.cameraController.setFollowMode(false);
+        }
+        this.cameras.main.centerOn(target.sprite.x, target.sprite.y);
+        window.dispatchEvent(new CustomEvent("phaser-npc-selected", { detail: target.getPaqueteUI() }));
+      } else if (typeof detail.x === "number" && typeof detail.y === "number") {
+        if (this.cameraFollow) {
+          this.cameraFollow = false;
+          this.cameraController.setFollowMode(false);
+        }
+        this.cameras.main.centerOn(detail.x, detail.y);
+      }
+    };
+
+    window.addEventListener("phaser-create-npcs", onSpawnRequest as EventListener);
+    window.addEventListener("phaser-focus-npc", onFocusNpc as EventListener);
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener("phaser-create-npcs", onSpawnRequest as EventListener);
+      window.removeEventListener("phaser-focus-npc", onFocusNpc as EventListener);
+      this.npcs.forEach(n => n.desinstanciarSprite());
+      this.npcs = [];
+    });
   }
 
   private setupWorld(): void {
@@ -103,7 +143,6 @@ export class MainScene extends Phaser.Scene {
       try { (useGameStore as any).getState?.().clearSelection?.(); } catch {}
     });
     console.log("[MainScene] Player spawneado en", spawn.x.toFixed(0), spawn.y.toFixed(0));
-    // Guardar posición cada 5s para retomar donde quedó al reloguear
     this.time.addEvent({ delay: 5000, loop: true, callback: () => this.savePlayerPos() });
     window.addEventListener('beforeunload', () => this.savePlayerPos());
   }
@@ -144,16 +183,6 @@ export class MainScene extends Phaser.Scene {
   }
 
   private setupDebug(): void {
-    const debugText = this.add.text(16, 16, `Lords Valley v0.1 • ${displayKey(getBinding("tutorial"))}:Tutorial • Click Izq:Interactuar`, {
-      fontSize: "12px", color: "#ffffff", backgroundColor: "#00000066", padding: { left: 6, right: 6, top: 4, bottom: 4 }
-    });
-    debugText.setDepth(100);
-    debugText.setScrollFactor(0);
-    this.time.addEvent({ delay: 500, loop: true, callback: () => {
-      const followKey = displayKey(getBinding("cameraFollow"));
-      const mode = this.cameraFollow ? "SIGUIENDO" : "LIBRE mouse";
-      debugText.setText(`Lords Valley v0.1 • ${displayKey(getBinding("tutorial"))}:Tutorial • ${followKey}:Cámara ${mode} • ${displayKey(getBinding("move_up"))}${displayKey(getBinding("move_left"))}${displayKey(getBinding("move_down"))}${displayKey(getBinding("move_right"))}:Mover`);
-    }});
     if (this.input.keyboard) {
       this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.ESC, Phaser.Input.Keyboard.KeyCodes.TAB]);
     }
@@ -206,6 +235,7 @@ export class MainScene extends Phaser.Scene {
         if (b) b.setVelocity(0);
         this.player.updateEntity();
       }
+      this.npcs.forEach(n => n.updateEntity());
       this.chatSystem.update(this.player);
       return;
     }
@@ -214,10 +244,23 @@ export class MainScene extends Phaser.Scene {
     if (InputSystem.isMapJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-action-map"));
     if (InputSystem.isMissionsJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-action-missions"));
     if (InputSystem.isStatsJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-action-stats"));
+
     if (this.player) {
       this.player.updateEntity();
       (window as any).__PLAYER_POS__ = { x: this.player.x, y: this.player.y };
     }
+
+    // Actualizar NPCs y exportar sus posiciones con paquete UI completo
+    this.npcs.forEach(n => n.updateEntity());
+    const npcPositions = this.npcs
+      .filter(n => n.sprite && n.sprite.active)
+      .map(n => ({
+        ...n.getPaqueteUI(),
+        x: n.sprite!.x,
+        y: n.sprite!.y,
+      }));
+    (window as any).__NPCS_POS__ = npcPositions;
+
     this.chatSystem.update(this.player);
     if (this.cameraFollow && this.player) {
       updateCamera(this, this.player);

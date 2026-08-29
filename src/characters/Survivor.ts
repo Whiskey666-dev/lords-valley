@@ -68,6 +68,33 @@ export class Survivor {
         this.equipment = new Equipment();
     }
 
+    public getPaqueteUI() {
+        return {
+            id: this.id,
+            name: this.nombre,
+            profession: this.profesion,
+            loyalty: this.loyalty.nivel,
+            health: this.stats.salud,
+            edad: this.edad,
+            traits: this.traits.lista,
+            personalidad: this.personality.resumen,
+            temperamento: this.personality.temperamento,
+            habilidad: this.skills.resumen,
+            gustos: this.gustos.resumen,
+            inventario: this.inventory.getResumen(),
+            equipamiento: this.equipment.getResumen(),
+            habilidades: Object.entries(this.skills.niveles).map(([k, v]) => `${k}: Lv${v}`),
+            stats: { salud: this.stats.salud, maxSalud: this.stats.maxSalud, energia: this.stats.energia },
+            needs: { hambre: this.needs.hambre, sed: this.needs.sed, sueno: this.needs.sueno },
+            nombre: this.nombre,
+            profesion: this.profesion,
+            lealtadNivel: this.loyalty.nivel,
+            salud: this.stats.salud,
+            positionX: this.sprite ? this.sprite.x : 0,
+            positionY: this.sprite ? this.sprite.y : 0,
+        };
+    }
+
     instanciarSprite(scene: Phaser.Scene, x: number, y: number) {
         this.sprite = new SurvivorSprite(scene, x, y);
         this.sprite.setImmovable(true);
@@ -77,28 +104,7 @@ export class Survivor {
         console.log(`[Survivor] Sprite instanciado ${this.nombre} (${this.id}) en ${x.toFixed(0)},${y.toFixed(0)} interactivo input=${!!this.sprite.input}`);
         this.sprite.on('pointerdown', () => {
             console.log(`[Survivor] Click detectado en ${this.nombre} (${this.id}) - dispatch panel`);
-            const paqueteUI = {
-                id: this.id,
-                name: this.nombre,
-                profession: this.profesion,
-                loyalty: this.loyalty.nivel,
-                health: this.stats.salud,
-                edad: this.edad,
-                traits: this.traits.lista,
-                personalidad: this.personality.resumen,
-                temperamento: this.personality.temperamento,
-                habilidad: this.skills.resumen,
-                gustos: this.gustos.resumen,
-                inventario: this.inventory.getResumen(),
-                equipamiento: this.equipment.getResumen(),
-                habilidades: Object.entries(this.skills.niveles).map(([k, v]) => `${k}: Lv${v}`),
-                stats: { salud: this.stats.salud, maxSalud: this.stats.maxSalud, energia: this.stats.energia },
-                needs: { hambre: this.needs.hambre, sed: this.needs.sed, sueno: this.needs.sueno },
-                nombre: this.nombre,
-                profesion: this.profesion,
-                lealtadNivel: this.loyalty.nivel,
-                salud: this.stats.salud
-            };
+            const paqueteUI = this.getPaqueteUI();
             console.log(`[Survivor] Dispatch phaser-npc-selected`, paqueteUI);
             window.dispatchEvent(new CustomEvent('phaser-npc-selected', { detail: paqueteUI }));
         });
