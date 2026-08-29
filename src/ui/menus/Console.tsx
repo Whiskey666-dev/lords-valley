@@ -9,8 +9,6 @@ import { isRebindingActive, setConsoleOpen } from "../input/KeyBindings";
  * Escalable: añadir comandos en COMMANDS.
  */
 
-type CommandHandler = (args: string[]) => void;
-
 export function Console() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"chat" | "console">("chat");
@@ -149,19 +147,11 @@ export function Console() {
     return () => window.removeEventListener("phaser-npcs-spawned", onSpawned as EventListener);
   }, []);
 
-  if (!open) {
-    return (
-      <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", zIndex: 22, background: "#00000088", padding: "3px 10px", borderRadius: 6, fontSize: 10, color: "#888", pointerEvents: "none" }}>
-        Presiona <b style={{ color: "#ccc" }}>ENTER</b> para <b>Chat</b> / <b>Consola</b> <span style={{ color: "#666" }}>({mode})</span>
-      </div>
-    );
-  }
+  if (!open) return null;
 
   return (
     <div
       style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 35, background: "#0a0a0af2", borderTop: "1px solid #333", padding: "8px 12px", backdropFilter: "blur(4px)" }}
-      onKeyDownCapture={e => { e.stopPropagation(); }}
-      onKeyUpCapture={e => { e.stopPropagation(); }}
     >
       <div style={{ display: "flex", gap: 6, maxWidth: 720, margin: "0 auto 8px auto" }}>
         <button
@@ -201,6 +191,7 @@ export function Console() {
             // Prioridad total a escritura: evita que Phaser o el juego capture WASD, SPACE, SHIFT, etc.
             e.stopPropagation();
             // No dejar que el evento llegue a window ni a Phaser
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             if (e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
             if (e.key === "Enter") {
@@ -215,6 +206,7 @@ export function Console() {
           }}
           onKeyUp={e => {
             e.stopPropagation();
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             if (e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
           }}

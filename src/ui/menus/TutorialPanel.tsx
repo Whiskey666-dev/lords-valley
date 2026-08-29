@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BINDING_INFOS, getAllBindings, getBinding, setBinding, resetBindings, displayKey, subscribe, setRebinding, type GameAction } from "../input/KeyBindings";
+import { BINDING_INFOS, getAllBindings, setBinding, resetBindings, displayKey, subscribe, setRebinding, type GameAction } from "../input/KeyBindings";
 
 interface Props {
   show: boolean;
@@ -30,7 +30,7 @@ export function TutorialPanel({ show, onClose }: Props) {
 
   useEffect(() => {
     const unsub = subscribe(() => setBindings(getAllBindings()));
-    return unsub;
+    return () => { unsub(); };
   }, []);
 
   useEffect(() => {

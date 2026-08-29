@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export interface NpcPanelData {
   id: string;
@@ -33,18 +33,12 @@ interface Props {
 export function NpcPanel({ npc, onClose }: Props) {
   console.log("[NpcPanel] render", npc?.id, npc?.name || (npc as unknown as { nombre?: string })?.nombre);
   const [tab, setTab] = useState<"inventario" | "equipamiento" | "habilidades">("inventario");
-  const [showAllInventory, setShowAllInventory] = useState(false);
 
   const TABS = [
     { id: "inventario" as const, label: "Inventario" },
     { id: "equipamiento" as const, label: "Equipamiento" },
     { id: "habilidades" as const, label: "Habilidades" },
   ];
-
-  // Reset expansión al cambiar de NPC o pestaña
-  useEffect(() => {
-    setShowAllInventory(false);
-  }, [npc.id, tab]);
 
   // Compatibilidad: soporta tanto name/nombre, profession/profesion, etc.
   const displayName = npc.name || (npc as unknown as { nombre?: string }).nombre || "Desconocido";
@@ -53,13 +47,13 @@ export function NpcPanel({ npc, onClose }: Props) {
   const displayHealth = npc.health ?? (npc as unknown as { salud?: number }).salud ?? 0;
 
   return (
-    <div style={{ position: 'fixed', right: 0, top: 32, bottom: 0, width: '380px', minWidth: '320px', maxWidth: '90vw', borderLeft: '2px solid #00ff88', backgroundColor: '#151515', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: 8 }}>
+    <div style={{ position: 'fixed', right: 0, top: 32, bottom: 0, width: '285px', minWidth: '240px', maxWidth: '90vw', borderLeft: '2px solid #00ff88', backgroundColor: '#151515', boxSizing: 'border-box', overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px 16px 20px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: 8, flexShrink: 0 }}>
         <h2 style={{ margin: 0, fontSize: 14, color: '#ffd66b' }}>🏰 {displayName}</h2>
         <button onClick={onClose} style={{ background: '#222', color: '#888', border: '1px solid #333', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>✕</button>
       </div>
 
-      <div style={{ backgroundColor: '#1c1c1c', padding: 12, borderRadius: 8, border: '1px solid #2e2e2e' }}>
+      <div style={{ backgroundColor: '#1c1c1c', padding: 12, borderRadius: 8, border: '1px solid #2e2e2e', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', flexShrink: 0 }}>
         <h3 style={{ color: '#6ab0ff', margin: '0 0 6px 0', fontSize: 13 }}>👤 {displayName} {npc.edad ? <span style={{ color: '#777', fontWeight: 400, fontSize: 11 }}>({npc.edad} años)</span> : null}</h3>
         <div style={{ fontSize: 11, lineHeight: 1.4 }}>
           <div><strong>Profesión:</strong> {displayProfession}</div>
@@ -79,95 +73,58 @@ export function NpcPanel({ npc, onClose }: Props) {
         </div>
       </div>
 
-      {/* Botones interactivos - más altos */}
-      <div style={{ display: 'flex', gap: 6 }}>
+      {/* Botones - altura y legibilidad calculadas, sin aplastar */}
+      <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', flexShrink: 0 }}>
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
-              flex: 1,
-              padding: '8px 12px',
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '8px 6px',
               borderRadius: 6,
               border: tab === t.id ? '1px solid #4a90e2' : '1px solid #333',
               background: tab === t.id ? '#1e2a3a' : '#1e1e1e',
               color: tab === t.id ? '#8ab4ff' : '#aaa',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textAlign: 'center',
+              lineHeight: 1.3,
             }}
+            title={t.label}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Contenido de pestaña - más alto para visualizar bien */}
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 16, flex: '1 1 auto', minHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        {tab === "inventario" && (() => {
-          const items = npc.inventario ?? [];
-          const VISIBLE_LIMIT = 4;
-          const needsExpansion = items.length > VISIBLE_LIMIT;
-          const visibleItems = showAllInventory || !needsExpansion ? items : items.slice(0, VISIBLE_LIMIT);
-          const remaining = items.length - VISIBLE_LIMIT;
-          return (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 12, color: '#ccc' }}>Inventario <span style={{ color: '#666', fontWeight: 400 }}>({items.length}/{npc.stats ? Math.round(npc.stats.maxSalud/5)+10 : 20})</span></h4>
-            <div style={{ flex: 1, minHeight: 100, maxHeight: 140, overflowY: 'auto', background: '#111', borderRadius: 6, padding: '6px 8px', border: '1px solid #222' }}>
-              {visibleItems.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.7 }}>
-                  {visibleItems.map((it, i) => <li key={i}>{it}</li>)}
-                </ul>
-              ) : <p style={{ fontSize: 12, color: '#666', margin: 0 }}>Vacío</p>}
-              {!showAllInventory && needsExpansion && (
-                <div style={{ fontSize: 10, color: '#666', marginTop: 6, textAlign: 'center' }}>+{remaining} más ocultos</div>
-              )}
-            </div>
-            {needsExpansion && !showAllInventory && (
-              <button
-                onClick={() => setShowAllInventory(true)}
-                style={{ marginTop: 10, width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #2e7d32', background: '#1e3322', color: '#6f6', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-              >
-                Abrir Inventario Completo ({remaining} más)
-              </button>
-            )}
-            {showAllInventory && needsExpansion && (
-              <button
-                onClick={() => setShowAllInventory(false)}
-                style={{ marginTop: 10, width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #333', background: '#222', color: '#999', fontSize: 10, cursor: 'pointer' }}
-              >
-                Mostrar menos
-              </button>
-            )}
-            {!needsExpansion && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
-                <button onClick={() => window.dispatchEvent(new CustomEvent('phaser-action-inventory', { detail: { npcId: npc.id } }))} style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #333', background: '#222', color: '#ccc', fontSize: 10, cursor: 'pointer' }}>Gestionar Inventario</button>
-              </div>
-            )}
+      {/* Contenido de pestaña - altura calculada para dejar ver ficha y botones, solo scroll vertical */}
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 14, flex: '0 1 auto', minHeight: 160, maxHeight: '42vh', maxWidth: '100%', width: '100%', boxSizing: 'border-box', overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {tab === "inventario" && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 8px', textAlign: 'center', gap: 4 }}>
+            <div style={{ fontSize: 24, opacity: 0.3 }}>📦</div>
+            <h4 style={{ margin: 0, fontSize: 11, color: '#666' }}>Inventario</h4>
+            <p style={{ fontSize: 10, color: '#555', margin: 0, lineHeight: 1.4 }}>Sistema en desarrollo<br/><span style={{ fontSize: 9, color: '#444' }}>Disponible próximamente</span></p>
           </div>
-          );
-        })()}
+        )}
         {tab === "equipamiento" && (
-          <div>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 12, color: '#ccc' }}>Equipamiento</h4>
-            {npc.equipamiento && npc.equipamiento.length > 0 ? (
-              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.6 }}>
-                {npc.equipamiento.map((eq, i) => <li key={i}>{eq}</li>)}
-              </ul>
-            ) : <p style={{ fontSize: 12, color: '#666' }}>Sin equipamiento</p>}
-            {npc.stats && (
-              <div style={{ marginTop: 8, fontSize: 11, color: '#999', background: '#111', padding: 6, borderRadius: 6 }}>
-                Salud: {npc.stats.salud}/{npc.stats.maxSalud} • Energía: {npc.stats.energia}
-              </div>
-            )}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 8px', textAlign: 'center', gap: 4 }}>
+            <div style={{ fontSize: 24, opacity: 0.3 }}>🛡️</div>
+            <h4 style={{ margin: 0, fontSize: 11, color: '#666' }}>Equipamiento</h4>
+            <p style={{ fontSize: 10, color: '#555', margin: 0, lineHeight: 1.4 }}>Sistema en desarrollo<br/><span style={{ fontSize: 9, color: '#444' }}>Disponible próximamente</span></p>
           </div>
         )}
         {tab === "habilidades" && (
-          <div>
+          <div style={{ maxWidth: '100%', overflow: 'hidden' }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: 12, color: '#ccc' }}>Habilidades</h4>
             {npc.habilidad && <div style={{ fontSize: 12, marginBottom: 6, color: '#8cf' }}><b>Especialidad:</b> {npc.habilidad}</div>}
             {npc.habilidades && (
-              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, lineHeight: 1.6 }}>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, lineHeight: 1.6, maxWidth: '100%', boxSizing: 'border-box', overflowWrap: 'anywhere' }}>
                 {npc.habilidades.map((h, i) => <li key={i}>{h}</li>)}
               </ul>
             )}
@@ -180,7 +137,7 @@ export function NpcPanel({ npc, onClose }: Props) {
         )}
       </div>
 
-      <p style={{ fontSize: 11, color: '#555', textAlign: 'center', margin: 0 }}>
+      <p style={{ fontSize: 11, color: '#555', textAlign: 'center', margin: 0, flexShrink: 0 }}>
         Click izquierdo en otro NPC para cambiar • ESC o suelo para cerrar
       </p>
     </div>

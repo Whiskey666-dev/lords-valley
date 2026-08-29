@@ -51,18 +51,6 @@ export const BINDING_INFOS: Record<GameAction, BindingInfo> = {
 
 const STORAGE_KEY = "lordsvalley_keybindings_v1";
 
-function loadStored(): Record<GameAction, string> | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    for (const k of Object.keys(BINDING_INFOS) as GameAction[]) {
-      if (typeof parsed[k] !== "string") return null;
-    }
-    return parsed as Record<GameAction, string>;
-  } catch { return null; }
-}
-
 let current: Record<GameAction, string> = (() => {
   // Requisito: siempre volver a WASD por defecto al recargar
   const def: Record<GameAction, string> = {} as Record<GameAction, string>;

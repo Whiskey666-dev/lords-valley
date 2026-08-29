@@ -1,11 +1,10 @@
 import Phaser from "phaser";
-import { ATTACK_DIRECTIONS_18, createCombatAnimations } from "../characters/Animations";
+import { createCombatAnimations } from "../characters/Animations";
 
 export class CombatSystem {
   public static attackingEntities: Set<Phaser.GameObjects.GameObject> = new Set();
 
-  /** @deprecated Usa ATTACK_DIRECTIONS_18 de src/characters/Animations.ts */
-  private static readonly ATTACK_DIRECTIONS = ATTACK_DIRECTIONS_18;
+  // ATTACK_DIRECTIONS_18 se usa directamente desde Animations.ts
 
   public static initCombatAnimations(scene: Phaser.Scene, prefix: string = "player_") {
     // Delegado al sistema centralizado de animaciones

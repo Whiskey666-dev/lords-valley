@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { startLaunchGame } from '../game/main';
-import { getBinding, displayKey, isRebindingActive, isConsoleOpenActive } from '../ui/input/KeyBindings';
+import { getBinding, isRebindingActive, isConsoleOpenActive } from '../ui/input/KeyBindings';
 import { TutorialPanel } from '../ui/menus/TutorialPanel';
 import { Navbar } from '../ui/menus/Navbar';
 import { Console } from '../ui/menus/Console';
@@ -15,6 +15,30 @@ function App() {
     useEffect(() => {
         if (!gameRef.current) {
             gameRef.current = startLaunchGame();
+            // Centrado pixel-perfect del canvas dentro de game-container (evita desfase flex)
+            setTimeout(() => {
+                const container = document.getElementById("game-container");
+                const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
+                if (container && canvas) {
+                    // Fuerza centrado absoluto para evitar desplazamiento por flex
+                    container.style.position = "relative";
+                    canvas.style.position = "absolute";
+                    canvas.style.left = "50%";
+                    canvas.style.top = "50%";
+                    canvas.style.transform = "translate(-50%, -50%)";
+                    canvas.style.margin = "0";
+                    // Log para verificar centrado
+                    const nav = document.querySelector("nav") as HTMLElement | null;
+                    setTimeout(() => {
+                        const cRect = canvas.getBoundingClientRect();
+                        const contRect = container.getBoundingClientRect();
+                        const navRect = nav?.getBoundingClientRect();
+                        console.log(`[Layout] canvas ${cRect.left.toFixed(0)},${cRect.top.toFixed(0)} ${cRect.width}x${cRect.height} center ${(cRect.left + cRect.width/2).toFixed(0)},${(cRect.top + cRect.height/2).toFixed(0)}`);
+                        console.log(`[Layout] container ${contRect.left.toFixed(0)},${contRect.top.toFixed(0)} ${contRect.width}x${contRect.height} center ${(contRect.left + contRect.width/2).toFixed(0)},${(contRect.top + contRect.height/2).toFixed(0)}`);
+                        if (navRect) console.log(`[Layout] navbar center ${(navRect.left + navRect.width/2).toFixed(0)} canvas center ${(cRect.left + cRect.width/2).toFixed(0)} delta ${((cRect.left + cRect.width/2) - (navRect.left + navRect.width/2)).toFixed(0)}`);
+                    }, 100);
+                }
+            }, 200);
         }
 
         const handleNPCSelect = (event: Event) => {
@@ -66,8 +90,6 @@ function App() {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
-    const tutorialKey = displayKey(getBinding("tutorial"));
-
     const handleZoomIn = () => {
         setZoom(z => {
             const nz = Math.min(100, z + 10);
@@ -88,11 +110,6 @@ function App() {
             {/* Navbar delgada modular en ui/menus/Navbar.tsx */}
             <Navbar onToggleTutorial={() => setShowTutorial(v => !v)} zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
 
-            {/* Hint - debajo de navbar delgada */}
-            <div style={{ position: 'absolute', top: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 20, backgroundColor: '#00000088', padding: '2px 8px', borderRadius: 6, fontSize: 10, pointerEvents: 'none' }}>
-                <b>Click Izq</b> interactúa • <b>{tutorialKey}</b> tutorial • <b>{displayKey(getBinding("close"))}</b> cierra
-            </div>
-
             {/* Panel tutorial modularizado en ui/menus/TutorialPanel.tsx */}
             <TutorialPanel show={showTutorial} onClose={() => setShowTutorial(false)} />
 
@@ -100,7 +117,7 @@ function App() {
             <Console />
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                <div id="game-container" style={{ flex: 1, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
+                <div id="game-container" style={{ flex: 1, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }} />
 
             {selectedNPC && <NpcPanel npc={selectedNPC} onClose={() => setSelectedNPC(null)} />}
             </div>
