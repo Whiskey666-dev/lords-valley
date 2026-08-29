@@ -1,22 +1,20 @@
-# game/systems / Context — Sistemas de Juego (Input)
+# game/systems / Context — Sistemas de Juego
 
 ## Propósito
-Capa de **sistemas desacoplados** que `MainScene` consume en `update()`. Hoy solo `InputSystem`, pero es el lugar para futuros `CombatSystem` tick, `TimeSystem`, etc.
+Capa de **sistemas desacoplados** que `MainScene` consume en `create()`/`update()`.
 
 ## Archivos
 | Archivo | Rol |
 |---|---|
-| `InputSystem.ts:1` | 80 líneas. Desacople entre `ui/input/KeyBindings` y `characters/Player`/`game/scenes/MainScene`. `getMovementVector(scene)`, `isJump/Dash/Attack/Tutorial/Close/Inventory/Map/Missions/StatsJustPressed(scene)`, `capture(scene)`. |
-
-## Lógica — `InputSystem.ts`
-- `getMovementVector(scene): {xDir,yDir,dir:Direction8}|null` -> si `isGameInputBlocked()` null, else `isActionDown(move_left/right/up/down)` prioridad left>right.
-- Wrappers `is*JustPressed` -> `isActionJustDown` con check de bloqueo.
-- `capture(scene)` -> `captureAllBindings(scene)` (registra `Phaser.KeyCodes` y re-captura al cambiar bindings).
-- `getDirectionFromVector:14` vector -> `Direction8`.
+| `InputSystem.ts:1` | Desacople entre `ui/input/KeyBindings` y `characters/Player`/`game/scenes/MainScene`. `getMovementVector(scene)`, `is*JustPressed(scene)`, `capture(scene)`. |
+| `CameraSystem.ts:1` | `setupCamera(scene,target)` + `updateCamera(scene,target)`. bounds `2000x2000`, zoom `percentToZoom 0..100 -> 0.6..1.6`, `centerOn` manual por frame (evita lerp/paneo lento del terreno). |
+| `SpawnSystem.ts:1` | `getCenterSpawn(scene)` (polar `r=200*sqrt(rand)` centro `1000,1000`) + `spawnNpcs(scene,count,player,npcs)` con separación `Distance<60`. |
+| `ChatBubbleSystem.ts:1` | `class ChatBubbleSystem` — escucha `phaser-chat-bubble`, `show(text,player)` (Container + Graphics + Text, tweens fade/pop, 3500ms), `update(player)` follow. |
+| `InteractionSystem.ts:1` | `setupInteraction(scene,npcs)` — `pointerdown` hit-test (`localObjects` + `Distance<40`), dispatch `phaser-npc-selected/deselected`, `addCapture(ESC,TAB)`. |
 
 ## Dependencias
-- Importa `ui/input/KeyBindings` (no `game/input` deprecated).
-- Consumido por `characters/Player.ts:70` y `game/scenes/MainScene.ts:260`.
+- `InputSystem`/`InteractionSystem`/`SpawnSystem` importan `ui/input/KeyBindings` y `characters/*`.
+- Consumidos por `game/scenes/MainScene.ts`.
 
 ## Para Repomix
-Nuevos sistemas (ej. `PhysicsSystem`, `AISystem` que llame `ai/*`) van aquí y se llaman desde `MainScene.update()`. Mantenerlos puros (reciben `scene`/`dt`/`entities`, no guardan estado global).
+Nuevos sistemas (ej. `PhysicsSystem`, `AISystem` que llame `ai/*`) van aquí y se llaman desde `MainScene`. Mantenerlos puros (reciben `scene`/`entities`, no guardan estado global salvo `ChatBubbleSystem` que encapsula su propio estado).

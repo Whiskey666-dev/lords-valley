@@ -6,11 +6,14 @@
 ## Estructura
 ```
 ui/
-  input/KeyBindings.ts      // 247 líneas — CANÓNICO singleton de bindings
-  menus/Navbar.tsx          //  ~120 líneas — barra superior 32px
-  menus/Console.tsx         //  ~260 líneas — consola + chat (ENTER)
-  menus/TutorialPanel.tsx   //  ~130 líneas — tutorial + rebinding UI
-  character/NpcPanel.tsx    //  ~180 líneas — ficha NPC (inventario/equipo/habilidades)
+  input/KeyBindings.ts      // CANÓNICO singleton de bindings
+  menus/Navbar.tsx          // barra superior 32px
+  menus/Console.tsx         // consola + chat (ENTER)
+  menus/TutorialPanel.tsx   // tutorial + editor de teclas
+  menus/KeybindsEditor.tsx  // editor de teclas reutilizable
+  menus/SettingsPanel.tsx   // panel de configuración categorizado
+  character/NpcPanel.tsx    // ficha NPC
+  inventory/PlayerInventoryPanel.tsx // inventario del jugador (grid + filtros)
 ```
 
 ## Lógica — `ui/input/KeyBindings.ts:1` (CANÓNICO, no `game/input`)
@@ -25,9 +28,9 @@ ui/
 **Helpers:** `normalizeKey:101` (toUpper), `displayKey:113` (SPACE->"Espacio", LEFT_CLICK->"Click Izq"), `phaserKeyCode:190` (mapea a `Phaser.Input.Keyboard.KeyCodes` para `captureAllBindings`)
 
 **Input Buffers `119-188`:**
-- `pressedKeys:Set<string>`, `justPressedKeys:Set<string>`, flags `isRebinding`, `isConsoleOpen` (+ `window.__lordsConsoleOpen` global para HMR safety)
-- `setRebinding/isRebindingActive/setConsoleOpen/isConsoleOpenActive/isGameInputBlocked:154`
-- `isGameInputBlocked()` true si `rebinding || consoleOpen || document.activeElement is input/textarea/contentEditable || window.__lordsConsoleOpen`
+- `pressedKeys:Set<string>`, `justPressedKeys:Set<string>`, flags `isRebinding`, `isConsoleOpen`, `isInventoryOpen` (+ `window.__lordsConsoleOpen` global para HMR safety)
+- `setRebinding/isRebindingActive/setConsoleOpen/isConsoleOpenActive/setInventoryOpen/isInventoryOpenActive/isGameInputBlocked`
+- `isGameInputBlocked()` true si `rebinding || consoleOpen || inventoryOpen || document.activeElement is input/textarea/contentEditable || window.__lordsConsoleOpen`
 - Listeners globales `keydown/keyup/blur` manejan sets, `justPressed` auto-clear `queueMicrotask+setTimeout0`
 - `isActionDown/JustDown:214-230` check `LEFT_CLICK` via `scene.input.activePointer.isDown`
 - `captureAllBindings:232` -> `scene.input.keyboard.addCapture(codes)` + subscribe para re-capturar al cambiar

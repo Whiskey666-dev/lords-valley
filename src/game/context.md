@@ -8,8 +8,12 @@
 |---|---|
 | `main.ts:6` | `GameConfig` + `startLaunchGame(): Phaser.Game`. |
 | `scenes/Preloader.ts:43` | `class Preloader extends Phaser.Scene` — carga spritesheets. |
-| `scenes/MainScene.ts:8` | `class MainScene extends Phaser.Scene` — **312 líneas, corazón**. |
-| `systems/InputSystem.ts:1` | Capa de desacople input (80 líneas). Lee `ui/input/KeyBindings`. |
+| `scenes/MainScene.ts:12` | `class MainScene extends Phaser.Scene` — **~127 líneas, orquesta** delegando en `game/systems/*`. |
+| `systems/InputSystem.ts:1` | Capa de desacople input. Lee `ui/input/KeyBindings`. |
+| `systems/CameraSystem.ts:1` | `setupCamera`/`updateCamera` — bounds, zoom, centrado manual. |
+| `systems/SpawnSystem.ts:1` | `getCenterSpawn`/`spawnNpcs` — posiciones aleatorias radio 200. |
+| `systems/ChatBubbleSystem.ts:1` | clase `ChatBubbleSystem` — burbuja de chat. |
+| `systems/InteractionSystem.ts:1` | `setupInteraction` — pointerdown NPC select/deselect. |
 | `input/KeyBindings.ts:1` | Re-export deprecated `export * from "../../ui/input/KeyBindings"` — canónico en `ui/input`. |
 
 ## Lógica — `game/main.ts:6`
@@ -28,32 +32,32 @@ startLaunchGame() => new Phaser.Game(config) // llamado desde app/App.tsx:16
   `player_walk_down/up/right_down/...`, `player_idle_*`, `player_dash_*`, `player_death_*`, `player_jump_*` (`Preloader.ts:54-91` `load.spritesheet({frameWidth:48, frameHeight:64})`)
 - `create():97` -> `scene.start("MainScene")`
 
-## Lógica — `scenes/MainScene.ts:8` (detallado)
-**Campos:** `player: Player`, `npcs: Survivor[]:10`, `chatBubble: Container`, `chatBubbleTimer`, getter `npc` (compat primer NPC)
+## Lógica — `scenes/MainScene.ts:12` (orquestador, delegado a sistemas)
+**Campos:** `player: Player`, `npcs: Survivor[]`, `chatSystem: ChatBubbleSystem`, getter `npc`.
 
-**`create():22`:**
-1. `physics.world.setBounds(0,0,2000,2000)` + `add.grid(1000,1000,2000,2000,64,64,0x1a1a1a)` (grid 64px)
-2. `initAllCharacterAnimations(this):27` + `verifyHumanAnimations:29` (104 checks walk/idle/jump/dash/death/attack x8 dirs x prefijos, logea faltantes)
-3. `player = new Player(this, spawn.x, spawn.y)` `getCenterSpawn():153` polar `r=200*sqrt(rand)` centro `1000,1000`
-4. Listener `phaser-create-npcs` -> `spawnNpcs(count)`
-5. `cameras.main.setBounds(0,0,2000,2000)` + `startFollow(player,true)`, zoom `percentToZoom 0..100 -> 0.6..1.6` (`45,49` default 1.0), listeners `phaser-zoom-set` + `wheel ctrl` con `zoomToPercent`
-6. `phaser-chat-bubble` -> `showChatBubble(text):197` (rounded rect + triangle, depth 200, tween fade/pop, 3500ms auto-hide, sigue a player en `update`)
-7. Debug text `84` hint bindings polled `time.addEvent 500ms`
-8. `pointerdown:93` hit-test: `scene.children.list` locals incluyen sprite? luego `Phaser.Math.Distance <40` proximity, else deselect si vacío. Dispatch `phaser-npc-selected` duplicado de `Survivor` click (redundancia). Logea razones.
-9. `capture ESC/TAB:145` `addKeys("ESC,TAB")`
+**`create():21`:**
+1. `setupWorld()` — `physics.world.setBounds(0,0,2000,2000)` + grid via `Graphics` estático (eficiente, evita repintado lento de `add.grid`)
+2. `initAllCharacterAnimations(this)` + `verifyHumanAnimations()`
+3. `spawnPlayer()` — `getCenterSpawn()` + `new Player(...)` + `setOrigin(0.5,0.5)`
+4. `chatSystem = new ChatBubbleSystem(this)` (escucha `phaser-chat-bubble`)
+5. `setupCamera(this, player)` (sistema) + `setupInteraction(this, npcs)` (sistema)
+6. `setupNpcListener()` — `phaser-create-npcs` -> `spawnNpcs`
+7. `setupDebug()` — vacío
 
-**`spawnNpcs(count):164`:**
-- Clamp 1..10, evita overlap `Distance<60` player/otros, 15 intentos random `±150` de centro, `new Survivor()` + `instanciarSprite` + `physics.add.collider(player,sprite)` y NPC<->NPC, push array, dispatch `phaser-npcs-spawned`
+**`spawnNpcs(count)` / `getNpcs()`:** delegan a `SpawnSystem.spawnNpcs`.
 
-**`showChatBubble():197`:**
-- `Container` en `player.y-48` con `Graphics` rounded rect `fillStyle 0x000000 0.8` + triangle + `Text` wordWrap 220, tweens `yoyo` + `alpha`
+**`update():91`:**
+1. `input.keyboard.enabled = !isGameInputBlocked()` + `resetKeys`
+2. bloqueo -> `player.updateEntity` + `chatSystem.update` + `updateCamera`
+3. `isClose/Inventory/Map/Missions/StatsJustPressed` -> dispatch `phaser-action-*`
+4. debug `J/K/L` -> todos NPCs jump/dash/attack
+5. `player.updateEntity` + loop `npcs.updateEntity` + `chatSystem.update` + `updateCamera`
 
-**`update():260`:**
-1. `input.keyboard.enabled = !isGameInputBlocked()` `262` + `resetKeys` si bloqueado
-2. Early return si bloqueado (zero vel + `player.updateEntity` + bubble follow)
-3. `isCloseJustPressed` -> deselect, `isInventory/Map/Missions/Stats` -> dispatch `phaser-action-*`
-4. Debug `J/K/L` -> todos NPCs jump/dash/attack `293`
-5. `player.updateEntity()` + loop `npcs.updateEntity()`, bubble `y = player.y-48`
+## Lógica — sistemas (`systems/*`)
+- `CameraSystem`: `startFollow` no se usa con lerp; `centerOn(player.x,player.y)` cada frame garantiza centrado pixel-perfect (solo se desacopla en bordes por `setBounds`).
+- `SpawnSystem.spawnNpcs`: clamp 1..10, evita overlap `Distance<60`, `new Survivor()` + colisiones player/NPC.
+- `ChatBubbleSystem`: Container en `player.y-48`, GraphRoundedRect + triángulo, tweens fade/pop, `delayedCall 3500ms`.
+- `InteractionSystem`: `pointerdown` hit-test `localObjects` + `Distance<40`, dispatch selección/deselección, `addCapture(ESC,TAB)`.
 
 ## Lógica — `systems/InputSystem.ts:1` (80 líneas)
 - `getMovementVector(scene):26` -> si `isGameInputBlocked` null, else `isActionDown(move_left/right/up/down)` priority left>right, retorna `{xDir,yDir,dir:Direction8}`
