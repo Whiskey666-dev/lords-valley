@@ -5,29 +5,93 @@ import { TutorialPanel } from '../ui/menus/TutorialPanel';
 import { Navbar } from '../ui/menus/Navbar';
 import { Console } from '../ui/menus/Console';
 import { NpcPanel, type NpcPanelData } from '../ui/character/NpcPanel';
+import { useGameStore } from './store/useGameStore';
+import { HUD } from '../ui/hud/HUD';
+import { MiniMap } from '../ui/hud/MiniMap';
+import { AuthScreen } from './auth/AuthScreen';
+import { fetchSettlementsByOwner } from './api/settlement.api';
+import { savePlayerPos } from './api/player.api';
 
 function App() {
     const gameRef = useRef<Phaser.Game | null>(null);
     const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
     const [showTutorial, setShowTutorial] = useState(false);
-    const [zoom, setZoom] = useState(50); // 0% alejar - 50% defecto - 100% acercar
+    const [zoom, setZoom] = useState(50);
+    const survivors = useGameStore((s) => s.survivors);
+    const selectedId = useGameStore((s) => s.selectedId);
+    const fetchSettlement = useGameStore((s) => s.fetchSettlement);
+    const [isAuthed, setIsAuthed] = useState<boolean>(() => !!localStorage.getItem('access_token'));
+
+    // Cross-tab sync: si otra pestaña crea usuario/login, detectar via storage
+    useEffect(() => {
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === 'access_token' || e.key === 'player' || e.key === 'settlementId') {
+                setIsAuthed(!!localStorage.getItem('access_token'));
+            }
+        };
+        const onAuthChanged = () => setIsAuthed(!!localStorage.getItem('access_token'));
+        window.addEventListener('storage', onStorage);
+        window.addEventListener('auth-changed', onAuthChanged as any);
+        return () => { window.removeEventListener('storage', onStorage); window.removeEventListener('auth-changed', onAuthChanged as any); };
+    }, []);
+
+    // Hydrate settlement solo si autenticado
+    useEffect(() => {
+        if (!isAuthed) return;
+        const load = async () => {
+            let sid = localStorage.getItem('settlementId');
+            if (!sid) {
+                const playerRaw = localStorage.getItem('player');
+                const playerId = localStorage.getItem('playerId') || (playerRaw ? JSON.parse(playerRaw).id : null);
+                if (playerId) {
+                    try {
+                        const list = await fetchSettlementsByOwner(playerId);
+                        if (list.length > 0) {
+                            sid = list[0].id;
+                            localStorage.setItem('settlementId', sid);
+                        }
+                    } catch {}
+                }
+                if (!sid) sid = import.meta.env.VITE_SETTLEMENT_ID || null;
+            }
+            if (sid) fetchSettlement(sid).catch(() => console.warn('[App] fetchSettlement failed', sid));
+        };
+        load();
+    }, [isAuthed, fetchSettlement]);
+
+    // Sync Zustand selectedId -> NpcPanel (reactive mirror, replaces window.CustomEvent)
+    useEffect(() => {
+        if (!selectedId) { setSelectedNPC(null); return; }
+        const sv = survivors.find((s: any) => s.id === selectedId);
+        if (sv) {
+            setSelectedNPC({
+                id: sv.id,
+                name: sv.firstName + ' ' + sv.lastName,
+                profession: sv.professions?.[0]?.type ?? sv.profesion ?? '—',
+                loyalty: sv.loyalty,
+                health: sv.needs?.health ?? sv.stats?.salud ?? 100,
+                edad: sv.age ?? sv.edad,
+                // spread for NpcPanel compatibility
+                ...(sv as any),
+            } as any);
+        }
+    }, [selectedId, survivors]);
 
     useEffect(() => {
+        if (!isAuthed) return;
         if (!gameRef.current) {
             gameRef.current = startLaunchGame();
-            // Centrado pixel-perfect del canvas dentro de game-container (evita desfase flex)
+            // Centrado pixel-perfect del canvas dentro de game-container (evita desfase flex) — incoming refactor
             setTimeout(() => {
                 const container = document.getElementById("game-container");
                 const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
                 if (container && canvas) {
-                    // Fuerza centrado absoluto para evitar desplazamiento por flex
                     container.style.position = "relative";
                     canvas.style.position = "absolute";
                     canvas.style.left = "50%";
                     canvas.style.top = "50%";
                     canvas.style.transform = "translate(-50%, -50%)";
                     canvas.style.margin = "0";
-                    // Log para verificar centrado
                     const nav = document.querySelector("nav") as HTMLElement | null;
                     setTimeout(() => {
                         const cRect = canvas.getBoundingClientRect();
@@ -74,7 +138,7 @@ function App() {
                 gameRef.current = null;
             }
         };
-    }, []);
+    }, [isAuthed]);
 
     // TAB global - respeta rebinding y consola/chat y usa binding actual desde UI (no desde Player)
     useEffect(() => {
@@ -105,21 +169,43 @@ function App() {
         });
     };
 
+    const handleLogout = async () => {
+        try {
+            const playerId = localStorage.getItem('playerId');
+            const pos = (window as any).__PLAYER_POS__;
+            if (playerId && pos && typeof pos.x === 'number') {
+                await savePlayerPos(playerId, { x: Math.round(pos.x), y: Math.round(pos.y) }).catch(()=>{});
+            }
+        } catch {}
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('player');
+        localStorage.removeItem('playerId');
+        localStorage.removeItem('settlementId');
+        setIsAuthed(false);
+        setSelectedNPC(null);
+        if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null; }
+        window.dispatchEvent(new CustomEvent('auth-changed'));
+    };
+
+    if (!isAuthed) {
+        return <AuthScreen onAuthenticated={() => setIsAuthed(true)} />;
+    }
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', backgroundColor: '#111111', color: '#ffffff', fontFamily: 'sans-serif', overflow: 'hidden', position: 'relative' }}>
-            {/* Navbar delgada modular en ui/menus/Navbar.tsx */}
             <Navbar onToggleTutorial={() => setShowTutorial(v => !v)} zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
-
-            {/* Panel tutorial modularizado en ui/menus/TutorialPanel.tsx */}
+            <button onClick={handleLogout} title="Cerrar sesión (localStorage)" style={{ position: 'absolute', top: 6, right: 8, zIndex: 30, background: '#1a1a1a', color: '#aaa', border: '1px solid #333', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Salir</button>
+            <HUD />
+            <MiniMap />
             <TutorialPanel show={showTutorial} onClose={() => setShowTutorial(false)} />
-
-            {/* Consola de comandos - ENTER para abrir, createNpc1..10 */}
             <Console />
-
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                 <div id="game-container" style={{ flex: 1, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }} />
-
-            {selectedNPC && <NpcPanel npc={selectedNPC} onClose={() => setSelectedNPC(null)} />}
+                {selectedNPC && (
+                  <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222' }}>
+                    <NpcPanel npc={selectedNPC} onClose={() => { setSelectedNPC(null); useGameStore.getState().clearSelection(); }} />
+                  </div>
+                )}
             </div>
         </div>
     );

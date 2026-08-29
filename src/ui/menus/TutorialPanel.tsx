@@ -48,7 +48,7 @@ export function TutorialPanel({ show, onClose }: Props) {
       else if (upper === "ESC" || upper === "ESCAPE") norm = "ESC";
       else if (upper.length === 1) norm = upper;
       else norm = upper;
-      setPending(prev => ({ ...prev, [editing]: norm }));
+      setPending(prev => ({ ...prev, [editing!]: norm }));
       setEditing(null);
     };
     window.addEventListener("keydown", handleRebind);

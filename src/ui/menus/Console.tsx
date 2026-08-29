@@ -9,6 +9,7 @@ import { isRebindingActive, setConsoleOpen } from "../input/KeyBindings";
  * Escalable: añadir comandos en COMMANDS.
  */
 
+// CommandHandler removido (no usado, comandos inline en execute)
 export function Console() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"chat" | "console">("chat");

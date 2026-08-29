@@ -22,7 +22,8 @@ export type GameAction =
   | "stats"
   | "tutorial"
   | "interact"
-  | "close";
+  | "close"
+  | "cameraFollow";
 
 export interface BindingInfo {
   label: string;
@@ -47,10 +48,12 @@ export const BINDING_INFOS: Record<GameAction, BindingInfo> = {
   tutorial: { label: "Tutorial",          category: "Sistema",    defaultKey: "TAB",   description: "Mostrar/ocultar tutorial" },
   interact: { label: "Interactuar",       category: "Acción",     defaultKey: "LEFT_CLICK", description: "Click izq entorno/NPC" },
   close:     { label: "Cerrar / Deseleccionar", category: "Sistema", defaultKey: "ESC", description: "Cerrar paneles" },
+  cameraFollow: { label: "Cámara Seguir",  category: "Sistema",    defaultKey: "Y",     description: "Alternar seguir personaje / libre mouse" },
 };
 
 const STORAGE_KEY = "lordsvalley_keybindings_v1";
 
+// loadStored eliminado: siempre se vuelve a WASD por defecto (requisito), no se persiste
 let current: Record<GameAction, string> = (() => {
   // Requisito: siempre volver a WASD por defecto al recargar
   const def: Record<GameAction, string> = {} as Record<GameAction, string>;

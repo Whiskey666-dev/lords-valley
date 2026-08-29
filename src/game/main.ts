@@ -5,9 +5,15 @@ import { Preloader } from './scenes/Preloader';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-container', // Vinculado al contenedor HTML que usaremos en React
+    width: window.innerWidth,
+    height: window.innerHeight,
+    parent: 'game-container',
+    scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: window.innerWidth,
+        height: window.innerHeight,
+    },
     physics: {
         default: 'arcade',
         arcade: {

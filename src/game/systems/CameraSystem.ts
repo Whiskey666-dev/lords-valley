@@ -7,8 +7,8 @@ import Phaser from "phaser";
  * carga lenta del terreno izquierda→derecha).
  */
 
-export function setupCamera(scene: Phaser.Scene, target: Phaser.GameObjects.GameObject): void {
-  scene.cameras.main.setBounds(0, 0, 2000, 2000);
+export function setupCamera(scene: Phaser.Scene, target: Phaser.GameObjects.GameObject, worldW = 6144, worldH = 6144): void {
+  scene.cameras.main.setBounds(0, 0, worldW, worldH);
 
   const percentToZoom = (p: number): number => {
     const c = Phaser.Math.Clamp(p, 0, 100);

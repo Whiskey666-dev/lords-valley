@@ -8,7 +8,10 @@ import { Survivor } from "../../characters/Survivor";
  */
 
 export function getCenterSpawn(_scene: Phaser.Scene): { x: number; y: number } {
-  const center = 1000;
+  // RTS overlay: centro dinámico según world bounds (6144 -> 3072, legacy 2000 -> 1000)
+  const bounds = (_scene as any)?.physics?.world?.bounds;
+  const worldW = bounds?.width ?? 6144;
+  const center = worldW / 2;
   const radius = 200;
   const r = radius * Math.sqrt(Math.random());
   const angle = Math.random() * Math.PI * 2;
