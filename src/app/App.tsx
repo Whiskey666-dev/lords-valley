@@ -5,6 +5,7 @@ import { TutorialPanel } from '../ui/menus/TutorialPanel';
 import { Navbar } from '../ui/menus/Navbar';
 import { Console } from '../ui/menus/Console';
 import { NpcPanel, type NpcPanelData } from '../ui/character/NpcPanel';
+import { PlayerInventoryPanel } from '../ui/inventory/PlayerInventoryPanel';
 import { useGameStore } from './store/useGameStore';
 import { HUD } from '../ui/hud/HUD';
 import { MiniMap } from '../ui/hud/MiniMap';
@@ -17,6 +18,7 @@ function App() {
     const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
     const [showTutorial, setShowTutorial] = useState(false);
     const [zoom, setZoom] = useState(50);
+    const [showPlayerInventory, setShowPlayerInventory] = useState(false);
     const survivors = useGameStore((s) => s.survivors);
     const selectedId = useGameStore((s) => s.selectedId);
     const fetchSettlement = useGameStore((s) => s.fetchSettlement);
@@ -149,6 +151,11 @@ function App() {
                 e.preventDefault();
                 setShowTutorial(prev => !prev);
             }
+            const inventoryKey = getBinding("inventory");
+            if (e.key.toUpperCase() === inventoryKey) {
+                e.preventDefault();
+                setShowPlayerInventory(prev => !prev);
+            }
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
@@ -193,7 +200,7 @@ function App() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', backgroundColor: '#111111', color: '#ffffff', fontFamily: 'sans-serif', overflow: 'hidden', position: 'relative' }}>
-            <Navbar onToggleTutorial={() => setShowTutorial(v => !v)} zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
+            <Navbar zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
             <button onClick={handleLogout} title="Cerrar sesión (localStorage)" style={{ position: 'absolute', top: 6, right: 8, zIndex: 30, background: '#1a1a1a', color: '#aaa', border: '1px solid #333', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Salir</button>
             <HUD />
             <MiniMap />
@@ -204,6 +211,14 @@ function App() {
                 {selectedNPC && (
                   <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222' }}>
                     <NpcPanel npc={selectedNPC} onClose={() => { setSelectedNPC(null); useGameStore.getState().clearSelection(); }} />
+                  </div>
+                )}
+                {showPlayerInventory && (
+                  <div style={{ position: 'fixed', right: 0, top: 32, bottom: 0, width: '285px', minWidth: '240px', maxWidth: '90vw',
+                    borderLeft: '2px solid #4a90e2', backgroundColor: '#151515', boxSizing: 'border-box',
+                    overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12,
+                    zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px 16px 20px 16px' }}>
+                    <PlayerInventoryPanel onClose={() => setShowPlayerInventory(false)} />
                   </div>
                 )}
             </div>
