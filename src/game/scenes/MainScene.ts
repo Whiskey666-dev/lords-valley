@@ -19,6 +19,9 @@ export class MainScene extends Phaser.Scene {
   private chunkRenderer!: ChunkRenderer;
   private cameraController!: CameraController;
   private cameraFollow = true;
+  private lastViewportEmit = 0;
+  private lastCameraX = 0;
+  private lastCameraY = 0;
 
   constructor() { super("MainScene"); }
 
@@ -127,7 +130,7 @@ export class MainScene extends Phaser.Scene {
           createdAt: dto.createdAt,
           positionX: this.player.x,
           positionY: this.player.y,
-        }}));
+        }});
       } catch (e) {
         window.dispatchEvent(new CustomEvent('phaser-npc-selected', { detail: {
           id: 'player',
@@ -138,7 +141,7 @@ export class MainScene extends Phaser.Scene {
           isPlayer: true,
           positionX: this.player.x,
           positionY: this.player.y,
-        }}));
+        }});
       }
       try { (useGameStore as any).getState?.().clearSelection?.(); } catch {}
     });
@@ -216,8 +219,40 @@ export class MainScene extends Phaser.Scene {
       (window as any).__CAMERA_FOLLOW__ = this.cameraFollow;
       window.dispatchEvent(new CustomEvent('phaser-camera-follow', { detail: this.cameraFollow }));
     }
+    
+    // Refinement C: Frustum Culling atómico usando cameraBounds nativo de Phaser
+    const cameraBounds = this.cameras.main.worldView;
+    if (this.player) {
+      this.npcs.forEach(sprite => {
+        const isVisible = cameraBounds.contains(sprite.sprite.x, sprite.sprite.y);
+        sprite.sprite.setVisible(isVisible);
+        sprite.sprite.setActive(isVisible); 
+      });
+    }
+    
     if (this.chunkRenderer && this.cameras.main) {
-      this.chunkRenderer.update(this.cameras.main);
+      // Refinement A: Usar camera.scrollX/scrollY en lugar de camera.x/camera.y
+      const movedEnough = Math.abs(this.cameras.main.scrollX - this.lastCameraX) > 512 ||
+                          Math.abs(this.cameras.main.scrollY - this.lastCameraY) > 512;
+      const enoughTime = Date.now() - this.lastViewportEmit > 300;
+      
+      if (movedEnough || enoughTime) {
+        // Capturar bounds actuales del viewport en chunks
+        const minChunkX = Math.floor(this.cameras.main.scrollX / 1024);
+        const minChunkY = Math.floor(this.cameras.main.scrollY / 1024);
+        const maxChunkX = Math.floor((this.cameras.main.scrollX + this.cameras.main.width) / 1024);
+        const maxChunkY = Math.floor((this.cameras.main.scrollY + this.cameras.main.height) / 1024);
+        
+        // Emitir al servidor solo si changed realmente
+        this.socket.emit('updateViewport', {
+          minChunkX, minChunkY, maxChunkX, maxChunkY,
+          settlementId: (useGameStore.getState()?.settlement?.ownerId || localStorage.getItem('playerId'))
+        });
+        
+        this.lastViewportEmit = Date.now();
+        this.lastCameraX = this.cameras.main.scrollX;
+        this.lastCameraY = this.cameras.main.scrollY;
+      }
     }
     if (this.cameraController) {
       this.cameraController.update(dt);

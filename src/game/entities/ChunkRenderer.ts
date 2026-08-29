@@ -29,25 +29,47 @@ export class ChunkRenderer {
     const centerChunk = this.worldToChunk(centerX, centerY);
 
     const dist = Phaser.Math.Distance.Between(centerX, centerY, this.lastCenter.x, this.lastCenter.y);
+    // Refinement B: Umbral de movimiento para evitar actualizaciones innecesarias
     if (dist < 512 && this.rendered.size > 0) return;
     this.lastCenter = { x: centerX, y: centerY };
 
-    const needed = new Set<string>();
+    // Determinar chunks necesarios alrededor del centro
+    const neededChunks: string[] = [];
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         const cx = centerChunk.chunkX + dx;
         const cy = centerChunk.chunkY + dy;
         const key = this.chunkKey(cx, cy);
-        needed.add(key);
-        if (!this.rendered.has(key) && !this.pending.has(key)) {
-          this.pending.add(key);
-          this.loadChunk(cx, cy).finally(() => this.pending.delete(key));
-        }
+        neededChunks.push(key);
       }
     }
+
+    // Filtrar solo los que no están renderizados ni en carga
+    const missingChunks = neededChunks.filter(
+      key => !this.rendered.has(key) && !this.pending.has(key)
+    );
+
+    // Refinement B: Cargar chunks faltantes en paralelo con Promise.all
+    if (missingChunks.length > 0) {
+      // Registrar inmediatamente en el Set para evitar peticiones duplicadas paralelas
+      missingChunks.forEach(cid => this.pending.add(cid));
+
+      await Promise.all(missingChunks.map(async (key) => {
+        const [cx, cy] = key.split(':').map(Number);
+        try {
+          const chunk = await useGameStore.getState().getChunk(cx, cy);
+          this.loadChunkData(key, chunk);
+        } catch (e) {
+          console.warn('[ChunkRenderer] failed load', cx, cy, e);
+        } finally {
+          this.pending.delete(key);
+        }
+      }));
+    }
+
     // Unload far (distance >1)
     for (const key of Array.from(this.rendered.keys())) {
-      if (!needed.has(key)) {
+      if (!neededChunks.includes(key)) {
         const g = this.rendered.get(key);
         g?.destroy(true);
         this.rendered.delete(key);
@@ -55,45 +77,40 @@ export class ChunkRenderer {
     }
   }
 
-  private async loadChunk(chunkX: number, chunkY: number) {
-    const key = this.chunkKey(chunkX, chunkY);
-    try {
-      const chunk = await useGameStore.getState().getChunk(chunkX, chunkY);
-      const group = this.scene.add.group();
-      const tiles: number[][] = chunk.tiles as number[][];
+  private loadChunkData(key: string, chunk: any) {
+    const [cx, cy] = key.split(':').map(Number);
+    const group = this.scene.add.group();
+    const tiles: number[][] = chunk.tiles as number[][];
 
-      for (let y = 0; y < CHUNK_TILES; y++) {
-        for (let x = 0; x < CHUNK_TILES; x++) {
-          const gid = tiles[y]?.[x] ?? 1;
-          const color = this.gidToColor(gid);
-          const rect = this.scene.add.rectangle(
-            chunkX * CHUNK_PX + x * TILE + TILE / 2,
-            chunkY * CHUNK_PX + y * TILE + TILE / 2,
-            TILE, TILE,
-            color,
-            1,
-          );
-          rect.setDepth(-10); // terreno siempre detrás de entidades
-          rect.setStrokeStyle(1, 0x000000, 0.05);
-          group.add(rect);
-          if (gid === 101 || gid === 102) {
-            rect.setFillStyle(0x555555);
-          }
+    for (let y = 0; y < CHUNK_TILES; y++) {
+      for (let x = 0; x < CHUNK_TILES; x++) {
+        const gid = tiles[y]?.[x] ?? 1;
+        const color = this.gidToColor(gid);
+        const rect = this.scene.add.rectangle(
+          cx * CHUNK_PX + x * TILE + TILE / 2,
+          cy * CHUNK_PX + y * TILE + TILE / 2,
+          TILE, TILE,
+          color,
+          1,
+        );
+        rect.setDepth(-10); // terreno siempre detrás de entidades
+        rect.setStrokeStyle(1, 0x000000, 0.05);
+        group.add(rect);
+        if (gid === 101 || gid === 102) {
+          rect.setFillStyle(0x555555);
         }
       }
-      // Resources overlay - encima del terreno pero debajo de survivors
-      const resources = (chunk.resources as any[]) ?? [];
-      for (const r of resources) {
-        const c = this.scene.add.circle(r.posX, r.posY, 6, 0xffd700, 0.9);
-        c.setDepth(0);
-        c.setStrokeStyle(1, 0x000000);
-        group.add(c);
-      }
-
-      this.rendered.set(key, group);
-    } catch (e) {
-      console.warn('[ChunkRenderer] failed load', chunkX, chunkY, e);
     }
+    // Resources overlay - encima del terreno pero debajo de survivors
+    const resources = (chunk.resources as any[]) ?? [];
+    for (const r of resources) {
+      const c = this.scene.add.circle(r.posX, r.posY, 6, 0xffd700, 0.9);
+      c.setDepth(0);
+      c.setStrokeStyle(1, 0x000000);
+      group.add(c);
+    }
+
+    this.rendered.set(key, group);
   }
 
   private gidToColor(gid: number): number {

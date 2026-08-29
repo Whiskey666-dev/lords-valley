@@ -14,6 +14,7 @@ interface GameState {
   zoom: number;
   loading: boolean;
   error: string | null;
+  lastReceivedSequenceNumber: number;
 
   fetchSettlement: (id: string) => Promise<void>;
   patchSurvivor: (id: string, patch: any) => void;
@@ -24,6 +25,7 @@ interface GameState {
   getChunk: (x: number, y: number) => Promise<any>;
   setChunk: (c: any) => void;
   getLvyDisplay: () => string;
+  resetState: () => void;
 }
 
 const chunkKey = (x: number, y: number) => `${x}:${y}`;
@@ -42,6 +44,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   zoom: 50,
   loading: false,
   error: null,
+  lastReceivedSequenceNumber: 0,
 
   fetchSettlement: async (id: string) => {
     set({ loading: true, error: null });
@@ -66,14 +69,39 @@ export const useGameStore = create<GameState>((set, get) => ({
       socket.off('RESOURCE_EXTRACTED');
 
       socket.on('SURVIVOR_LOYALTY_CHANGED', (payload: any) => {
+        // Refinement D: Verificar secuencia antes de aplicar delta
+        const expectedSeq = get().lastReceivedSequenceNumber + 1;
+        if (payload?.sequenceNumber !== expectedSeq) {
+          console.warn('[store] SURVIVOR_LOYALTY_CHANGED secuencia inesperada:', payload?.sequenceNumber, 'esperada:', expectedSeq);
+          get().resetState();
+          return;
+        }
+        // Actualizar último número de secuencia recibido
+        set({ lastReceivedSequenceNumber: payload.sequenceNumber });
         get().patchSurvivor(payload.survivorId, { loyalty: payload.loyalty, isLoyalAbsolute: payload.isLoyalAbsolute });
       });
       socket.on('SETTLEMENT_TICK_COMPLETED', (payload: any) => {
+        // Refinement D: Verificar secuencia antes de aplicar delta
+        const expectedSeq = get().lastReceivedSequenceNumber + 1;
+        if (payload?.sequenceNumber !== expectedSeq) {
+          console.warn('[store] SETTLEMENT_TICK_COMPLETED secuencia inesperada:', payload?.sequenceNumber, 'esperada:', expectedSeq);
+          get().resetState();
+          return;
+        }
+        set({ lastReceivedSequenceNumber: payload.sequenceNumber });
         if (payload.settlementId !== id) return;
         // Optionally refetch or patch gameTime
         set((s) => s.settlement ? { settlement: { ...s.settlement, gameTime: payload.gameTime } } as any : {});
       });
       socket.on('RESOURCE_EXTRACTED', (payload: any) => {
+        // Refinement D: Verificar secuencia antes de aplicar delta
+        const expectedSeq = get().lastReceivedSequenceNumber + 1;
+        if (payload?.sequenceNumber !== expectedSeq) {
+          console.warn('[store] RESOURCE_EXTRACTED secuencia inesperada:', payload?.sequenceNumber, 'esperada:', expectedSeq);
+          get().resetState();
+          return;
+        }
+        set({ lastReceivedSequenceNumber: payload.sequenceNumber });
         // Could update inventory string quantity via BigInt math in selector
         console.log('[store] RESOURCE_EXTRACTED', payload);
       });
@@ -129,4 +157,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return raw;
     }
   },
+
+  // Refinement D: Acción para restablecer el estado completo del settlement
+  resetState: () => set({ settlement: null, survivors: [], buildings: [], inventory: [], historyLog: [], chunks: new Map(), lastReceivedSequenceNumber: 0 }),
 }));
