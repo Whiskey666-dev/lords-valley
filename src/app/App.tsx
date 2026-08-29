@@ -22,7 +22,7 @@ function App() {
     const survivors = useGameStore((s) => s.survivors);
     const selectedId = useGameStore((s) => s.selectedId);
     const fetchSettlement = useGameStore((s) => s.fetchSettlement);
-    const [isAuthed, setIsAuthed] = useState<boolean>(() => !!localStorage.getItem('access_token'));
+    const [isAuthed, setIsAuthed] = useState(() => !!localStorage.getItem('access_token'));
 
     // Cross-tab sync: si otra pestaña crea usuario/login, detectar via storage
     useEffect(() => {
@@ -33,8 +33,8 @@ function App() {
         };
         const onAuthChanged = () => setIsAuthed(!!localStorage.getItem('access_token'));
         window.addEventListener('storage', onStorage);
-        window.addEventListener('auth-changed', onAuthChanged as any);
-        return () => { window.removeEventListener('storage', onStorage); window.removeEventListener('auth-changed', onAuthChanged as any); };
+        window.addEventListener('auth-changed', onAuthChanged);
+        return () => { window.removeEventListener('storage', onStorage); window.removeEventListener('auth-changed', onAuthChanged); };
     }, []);
 
     // Hydrate settlement solo si autenticado
@@ -52,7 +52,7 @@ function App() {
                             sid = list[0].id;
                             localStorage.setItem('settlementId', sid);
                         }
-                    } catch {}
+                    } catch (e) { console.warn('[App] fetchSettlements error', e); }
                 }
                 if (!sid) sid = import.meta.env.VITE_SETTLEMENT_ID || null;
             }
@@ -61,23 +61,26 @@ function App() {
         load();
     }, [isAuthed, fetchSettlement]);
 
-    // Sync Zustand selectedId -> NpcPanel (reactive mirror, replaces window.CustomEvent)
-    useEffect(() => {
-        if (!selectedId) { setSelectedNPC(null); return; }
-        const sv = survivors.find((s: any) => s.id === selectedId);
-        if (sv) {
+// Sync Zustand selectedId -> NpcPanel (reactive mirror, replaces window.CustomEffect)
+/* eslint-disable react/no-set-state-in-effect */
+useEffect(() => {
+        const sv = survivors.find((s) => s.id === selectedId);
+        if (!sv || !selectedId) {
+            setTimeout(() => setSelectedNPC(null), 0);
+        } else {
             setSelectedNPC({
                 id: sv.id,
                 name: sv.firstName + ' ' + sv.lastName,
-                profession: sv.professions?.[0]?.type ?? sv.profesion ?? '—',
+                profession: sv.professions?.[0]?.type ?? sv.profession ?? '—',
                 loyalty: sv.loyalty,
                 health: sv.needs?.health ?? sv.stats?.salud ?? 100,
                 edad: sv.age ?? sv.edad,
                 // spread for NpcPanel compatibility
-                ...(sv as any),
-            } as any);
+                ...(sv),
+            } as NpcPanelData);
         }
     }, [selectedId, survivors]);
+/* eslint-enable react/no-set-state-in-effect */
 
     useEffect(() => {
         if (!isAuthed) return;
@@ -99,9 +102,9 @@ function App() {
                         const cRect = canvas.getBoundingClientRect();
                         const contRect = container.getBoundingClientRect();
                         const navRect = nav?.getBoundingClientRect();
-                        console.log(`[Layout] canvas ${cRect.left.toFixed(0)},${cRect.top.toFixed(0)} ${cRect.width}x${cRect.height} center ${(cRect.left + cRect.width/2).toFixed(0)},${(cRect.top + cRect.height/2).toFixed(0)}`);
-                        console.log(`[Layout] container ${contRect.left.toFixed(0)},${contRect.top.toFixed(0)} ${contRect.width}x${contRect.height} center ${(contRect.left + contRect.width/2).toFixed(0)},${(contRect.top + contRect.height/2).toFixed(0)}`);
-                        if (navRect) console.log(`[Layout] navbar center ${(navRect.left + navRect.width/2).toFixed(0)} canvas center ${(cRect.left + cRect.width/2).toFixed(0)} delta ${((cRect.left + cRect.width/2) - (navRect.left + navRect.width/2)).toFixed(0)}`);
+                        console.log(`[Layout] canvas ${cRect.left.toFixed(0)},${cRect.top.toFixed(0)} ${cRect.width}x${cRect.height} center ${(cRect.left + cRect.width / 2).toFixed(0)},${(cRect.top + cRect.height / 2).toFixed(0)}`);
+                        console.log(`[Layout] container ${contRect.left.toFixed(0)},${contRect.top.toFixed(0)} ${contRect.width}x${contRect.height} center ${(contRect.left + contRect.width / 2).toFixed(0)},${(contRect.top + contRect.height / 2).toFixed(0)}`);
+                        if (navRect) console.log(`[Layout] navbar center ${(navRect.left + navRect.width / 2).toFixed(0)} canvas center ${(cRect.left + cRect.width / 2).toFixed(0)} delta ${((cRect.left + cRect.width / 2) - (navRect.left + navRect.width / 2)).toFixed(0)}`);
                     }, 100);
                 }
             }, 200);
@@ -126,14 +129,14 @@ function App() {
         window.addEventListener('phaser-npc-selected', handleNPCSelect);
         window.addEventListener('phaser-npc-deselected', handleNPCClose);
         window.addEventListener('phaser-toggle-tutorial', handleToggleTutorial);
-        window.addEventListener('phaser-zoom-sync', handleZoomSync as EventListener);
+        window.addEventListener('phaser-zoom-sync', handleZoomSync);
         window.addEventListener('wheel', handleWheel, { passive: false });
 
         return () => {
             window.removeEventListener('phaser-npc-selected', handleNPCSelect);
             window.removeEventListener('phaser-npc-deselected', handleNPCClose);
             window.removeEventListener('phaser-toggle-tutorial', handleToggleTutorial);
-            window.removeEventListener('phaser-zoom-sync', handleZoomSync as EventListener);
+            window.removeEventListener('phaser-zoom-sync', handleZoomSync);
             window.removeEventListener('wheel', handleWheel);
             if (gameRef.current) {
                 gameRef.current.destroy(true);
@@ -178,12 +181,14 @@ function App() {
 
     const handleLogout = async () => {
         try {
+            /* eslint-disable @typescript-eslint/no-explicit-any */
             const playerId = localStorage.getItem('playerId');
             const pos = (window as any).__PLAYER_POS__;
+            /* eslint-enable @typescript-eslint/no-explicit-any */
             if (playerId && pos && typeof pos.x === 'number') {
-                await savePlayerPos(playerId, { x: Math.round(pos.x), y: Math.round(pos.y) }).catch(()=>{});
+                await savePlayerPos(playerId, { x: Math.round(pos.x), y: Math.round(pos.y) }).catch(() => console.warn('[App] savePlayerPos error'));
             }
-        } catch {}
+        } catch (e) { console.warn('[App] handleLogout error', e); }
         localStorage.removeItem('access_token');
         localStorage.removeItem('player');
         localStorage.removeItem('playerId');
@@ -209,17 +214,19 @@ function App() {
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                 <div id="game-container" style={{ flex: 1, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }} />
                 {selectedNPC && (
-                  <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222' }}>
-                    <NpcPanel npc={selectedNPC} onClose={() => { setSelectedNPC(null); useGameStore.getState().clearSelection(); }} />
-                  </div>
+                    <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222' }}>
+                        <NpcPanel npc={selectedNPC} onClose={() => { setSelectedNPC(null); useGameStore.getState().clearSelection(); }} />
+                    </div>
                 )}
                 {showPlayerInventory && (
-                  <div style={{ position: 'fixed', right: 0, top: 32, bottom: 0, width: '285px', minWidth: '240px', maxWidth: '90vw',
-                    borderLeft: '2px solid #4a90e2', backgroundColor: '#151515', boxSizing: 'border-box',
-                    overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12,
-                    zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px 16px 20px 16px' }}>
-                    <PlayerInventoryPanel onClose={() => setShowPlayerInventory(false)} />
-                  </div>
+                    <div style={{
+                        position: 'fixed', right: 0, top: 32, bottom: 0, width: '285px', minWidth: '240px', maxWidth: '90vw',
+                        borderLeft: '2px solid #4a90e2', backgroundColor: '#151515', boxSizing: 'border-box',
+                        overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12,
+                        zIndex: 100, boxShadow: '-4px 0 24px #000000aa', padding: '16px 16px 20px 16px'
+                    }}>
+                        <PlayerInventoryPanel onClose={() => setShowPlayerInventory(false)} />
+                    </div>
                 )}
             </div>
         </div>
