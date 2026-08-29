@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useBuildings } from "../../hooks/buildings/useBuildings";
 import {
   CATEGORY_INFO,
-  type BuildingCategory,
   type HierarchyRole,
 } from "../../hooks/buildings/buildingsData";
 
@@ -34,7 +33,6 @@ export function BuildingsPanel({ onClose }: Props) {
   } = useBuildings();
 
   const [selectedNpcForSlot, setSelectedNpcForSlot] = useState<Record<string, string>>({});
-  const [selectedRoleForSlot, setSelectedRoleForSlot] = useState<Record<string, HierarchyRole>>({});
 
   return (
     <div
@@ -42,7 +40,7 @@ export function BuildingsPanel({ onClose }: Props) {
         position: 'fixed',
         inset: 0,
         zIndex: 220,
-        backgroundColor: 'rgba(3, 6, 12, 0.88)',
+        backgroundColor: 'rgba(0, 0, 0, 0.80)',
         backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
@@ -55,84 +53,80 @@ export function BuildingsPanel({ onClose }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      {/* Contenedor Principal */}
+      <style>{`
+        .b-scroll::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .b-scroll::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.2);
+        }
+        .b-scroll::-webkit-scrollbar-thumb {
+          background: #22374e;
+          border-radius: 3px;
+        }
+        .b-scroll::-webkit-scrollbar-thumb:hover {
+          background: #33557a;
+        }
+      `}</style>
+
+      {/* ── Ventana Principal con Dimensiones Estables y Contención ── */}
       <div
         style={{
-          width: '1120px',
-          maxWidth: '98vw',
-          height: '88vh',
-          maxHeight: '780px',
-          backgroundColor: '#090f17',
-          border: '1px solid #1c2a3c',
-          borderRadius: 10,
+          width: '1060px',
+          maxWidth: '96vw',
+          height: '670px',
+          maxHeight: '90vh',
+          backgroundColor: '#0c141f',
+          border: '1px solid #223548',
+          borderRadius: 8,
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.9), inset 0 0 1px rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.08)',
           overflow: 'hidden',
-          fontSize: '11px',
+          boxSizing: 'border-box',
         }}
       >
-        {/* ── Barra Superior / Header ── */}
+        {/* ── 1. Barra de Título Superior (40px) ── */}
         <div
           style={{
-            height: 44,
-            minHeight: 44,
-            backgroundColor: '#060b12',
-            borderBottom: '1px solid #142030',
+            height: 40,
+            minHeight: 40,
+            backgroundColor: '#070c13',
+            borderBottom: '1px solid #192838',
             display: 'flex',
             alignItems: 'center',
-            padding: '0 14px',
-            gap: 12,
             justifyContent: 'space-between',
+            padding: '0 14px',
             flexShrink: 0,
+            boxSizing: 'border-box',
           }}
         >
-          {/* Título */}
+          {/* Logo / Título */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 16 }}>🏛️</span>
-            <div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#e2d4a8', letterSpacing: 0.3 }}>
-                Edificios y Factorías Feudales
-              </span>
-              <span style={{ fontSize: 9, color: '#4a6a8a', marginLeft: 8 }}>
-                {stats.existing} activos · {stats.locked} proyectos · {stats.totalWorkersAssigned} obreros asignados
-              </span>
-            </div>
-          </div>
-
-          {/* Filtros de Estado: Todos / Existentes / Bloqueados */}
-          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#0c1420', padding: '2px', borderRadius: 6, border: '1px solid #142232' }}>
-            <FilterTabBtn
-              label={`Todos (${stats.total})`}
-              active={filterMode === 'all'}
-              onClick={() => setFilterMode('all')}
-            />
-            <FilterTabBtn
-              label={`Construidos (${stats.existing})`}
-              active={filterMode === 'existing'}
-              onClick={() => setFilterMode('existing')}
-            />
-            <FilterTabBtn
-              label={`Bloqueados (${stats.locked})`}
-              active={filterMode === 'locked'}
-              onClick={() => setFilterMode('locked')}
-            />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#f0e6c8', letterSpacing: 0.3 }}>
+              Gestión y Administración de Edificios
+            </span>
+            <span style={{ fontSize: 10, color: '#688298', marginLeft: 4 }}>
+              ({stats.existing} construidos · {stats.locked} bloqueados)
+            </span>
           </div>
 
           {/* Buscador y Botón Cerrar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
               type="text"
-              placeholder="🔍 Filtrar edificio..."
+              placeholder="Buscar edificio..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                backgroundColor: '#0b1420',
-                border: '1px solid #18283a',
-                borderRadius: 5,
-                padding: '4px 8px',
-                fontSize: 10,
-                color: '#fff',
+                backgroundColor: '#101b28',
+                border: '1px solid #203348',
+                borderRadius: 4,
+                padding: '3px 8px',
+                fontSize: 11,
+                color: '#ffffff',
                 outline: 'none',
                 width: 140,
               }}
@@ -140,71 +134,93 @@ export function BuildingsPanel({ onClose }: Props) {
             <button
               onClick={onClose}
               style={{
-                backgroundColor: '#180a0a',
-                color: '#e05555',
-                border: '1px solid #341414',
-                borderRadius: 5,
-                padding: '4px 10px',
-                fontSize: 10,
+                backgroundColor: '#220d0d',
+                color: '#ff6666',
+                border: '1px solid #4a1c1c',
+                borderRadius: 4,
+                padding: '3px 10px',
+                fontSize: 11,
                 fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.12s ease',
               }}
             >
-              ✕ Cerrar [ESC]
+              ✕ Cerrar
             </button>
           </div>
         </div>
 
-        {/* ── Fila de Categorías (Chips rápidos de filtro) ── */}
+        {/* ── 2. Barra de Filtros y Categorías (36px) ── */}
         <div
           style={{
-            backgroundColor: '#080d15',
-            borderBottom: '1px solid #121c2a',
-            padding: '4px 14px',
+            height: 36,
+            minHeight: 36,
+            backgroundColor: '#091018',
+            borderBottom: '1px solid #162434',
             display: 'flex',
             alignItems: 'center',
-            gap: 5,
-            overflowX: 'auto',
+            justifyContent: 'space-between',
+            padding: '0 12px',
+            gap: 10,
             flexShrink: 0,
+            boxSizing: 'border-box',
           }}
         >
-          <CategoryChip
-            label="🌐 Todas las Categorías"
-            active={selectedCategory === 'all'}
-            onClick={() => setSelectedCategory('all')}
-          />
-          {(Object.entries(CATEGORY_INFO) as [BuildingCategory, { label: string; icon: string }][]).map(
-            ([catKey, catVal]) => (
-              <CategoryChip
-                key={catKey}
-                label={`${catVal.icon} ${catVal.label}`}
-                active={selectedCategory === catKey}
-                onClick={() => setSelectedCategory(catKey)}
-              />
-            )
-          )}
+          {/* Segmentado: Todos / Construidos / Bloqueados */}
+          <div style={{ display: 'flex', backgroundColor: '#060a10', padding: '2px', borderRadius: 4, border: '1px solid #14202e' }}>
+            <SegmentBtn label="Todos" count={stats.total} active={filterMode === 'all'} onClick={() => setFilterMode('all')} />
+            <SegmentBtn label="Construidos" count={stats.existing} active={filterMode === 'existing'} onClick={() => setFilterMode('existing')} />
+            <SegmentBtn label="Bloqueados" count={stats.locked} active={filterMode === 'locked'} onClick={() => setFilterMode('locked')} />
+          </div>
+
+          {/* Selector de Categoría Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#668096', fontWeight: 600 }}>Categoría:</span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value as any)}
+              style={{
+                backgroundColor: '#101a26',
+                color: '#8acfff',
+                border: '1px solid #1c2e42',
+                borderRadius: 4,
+                padding: '2px 8px',
+                fontSize: 10.5,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">🌐 Todas las Categorías ({stats.total})</option>
+              {Object.entries(CATEGORY_INFO).map(([key, info]) => (
+                <option key={key} value={key}>
+                  {info.icon} {info.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* ── Cuerpo Principal dividido en 2 columnas ── */}
+        {/* ── 3. Cuerpo Dividido en 2 Columnas ── */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Columna Izquierda: Lista compacta de Edificios */}
+          {/* ── Columna Izquierda: Lista de Edificios (310px fija) ── */}
           <div
+            className="b-scroll"
             style={{
-              width: '295px',
-              minWidth: '260px',
-              borderRight: '1px solid #131f2e',
-              backgroundColor: '#070c14',
+              width: 310,
+              minWidth: 310,
+              borderRight: '1px solid #162434',
+              backgroundColor: '#080d14',
               display: 'flex',
               flexDirection: 'column',
               overflowY: 'auto',
               padding: '6px',
               gap: 4,
+              flexShrink: 0,
+              boxSizing: 'border-box',
             }}
           >
             {buildings.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px 10px', color: '#4a5e70', fontSize: 10 }}>
-                No hay edificios con estos filtros.
+              <div style={{ textAlign: 'center', padding: '30px 10px', color: '#556c80', fontSize: 11 }}>
+                No hay edificios disponibles.
               </div>
             ) : (
               buildings.map((b) => {
@@ -217,71 +233,72 @@ export function BuildingsPanel({ onClose }: Props) {
                     key={b.id}
                     onClick={() => setSelectedBuildingId(b.id)}
                     style={{
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      backgroundColor: isSelected ? '#122030' : isLocked ? '#0a0f16' : '#0c141e',
-                      border: `1px solid ${
-                        isSelected ? '#2e669e' : isLocked ? '#131b26' : '#162332'
-                      }`,
+                      height: 48,
+                      padding: '0 8px',
+                      borderRadius: 5,
+                      backgroundColor: isSelected ? '#152538' : isLocked ? '#0b1017' : '#0e1622',
+                      border: `1px solid ${isSelected ? '#357ebd' : isLocked ? '#141c26' : '#1a293a'}`,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
-                      transition: 'all 0.1s ease',
-                      opacity: isLocked ? 0.7 : 1,
+                      flexShrink: 0,
+                      boxSizing: 'border-box',
                     }}
                   >
-                    {/* Icono pequeño */}
+                    {/* Icono */}
                     <div
                       style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 5,
-                        backgroundColor: isLocked ? '#101620' : '#142332',
+                        width: 30,
+                        height: 30,
+                        borderRadius: 4,
+                        backgroundColor: isLocked ? '#121820' : '#142232',
+                        border: `1px solid ${isLocked ? '#1c2634' : '#223850'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 14,
+                        fontSize: 16,
                         flexShrink: 0,
-                        border: `1px solid ${isLocked ? '#1a2430' : '#22364c'}`,
                       }}
                     >
                       {b.icon}
                     </div>
 
-                    {/* Info compacta */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Texto */}
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span
                           style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            color: isSelected ? '#70c8ff' : isLocked ? '#788898' : '#d2dce8',
-                            whiteSpace: 'nowrap',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            color: isSelected ? '#8acfff' : isLocked ? '#b0bac4' : '#ffffff',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {b.name}
                         </span>
                         <span
                           style={{
-                            fontSize: 8,
+                            fontSize: 9,
+                            fontWeight: 700,
                             padding: '1px 4px',
                             borderRadius: 3,
-                            backgroundColor: isLocked ? '#221414' : '#0e2418',
-                            color: isLocked ? '#c06060' : '#00ff88',
-                            fontWeight: 700,
+                            backgroundColor: isLocked ? '#281212' : '#0c2818',
+                            color: isLocked ? '#ff6666' : '#2ecc71',
+                            flexShrink: 0,
+                            marginLeft: 4,
                           }}
                         >
-                          {isLocked ? '🔒 Bloq.' : `Nv.${b.level}`}
+                          {isLocked ? 'Bloqueado' : `Nv.${b.level}`}
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, fontSize: 9, color: '#486278' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, fontSize: 9.5, color: '#688096' }}>
                         <span>{b.categoryLabel}</span>
                         <span>
-                          👥 {assignedCount}/{b.maxWorkers} · ⚡{isLocked ? '0%' : `${b.efficiency}%`}
+                          👥 {assignedCount}/{b.maxWorkers} {b.status === 'existing' && `· ⚡${b.efficiency}%`}
                         </span>
                       </div>
                     </div>
@@ -291,113 +308,117 @@ export function BuildingsPanel({ onClose }: Props) {
             )}
           </div>
 
-          {/* Columna Derecha: Vista Detallada de Gestión y Administración */}
+          {/* ── Columna Derecha: Detalle de Gestión / Administración ── */}
           {selectedBuilding ? (
             <div
               style={{
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                overflowY: 'auto',
-                backgroundColor: '#090f18',
+                overflow: 'hidden',
+                backgroundColor: '#0a121c',
+                minWidth: 0,
+                boxSizing: 'border-box',
               }}
             >
-              {/* Header compacto del edificio seleccionado */}
+              {/* Header del Edificio Seleccionado con Altura Flexible y Alineación Perfecta */}
               <div
                 style={{
-                  padding: '10px 14px',
-                  backgroundColor: '#060b12',
-                  borderBottom: '1px solid #132030',
+                  minHeight: 58,
+                  backgroundColor: '#070d14',
+                  borderBottom: '1px solid #162434',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  padding: '10px 16px',
                   gap: 12,
                   flexShrink: 0,
+                  boxSizing: 'border-box',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
                   <div
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      backgroundColor: '#101d2c',
-                      border: '1px solid #223850',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 6,
+                      backgroundColor: '#122030',
+                      border: '1px solid #203850',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 18,
+                      fontSize: 22,
+                      flexShrink: 0,
                     }}
                   >
                     {selectedBuilding.icon}
                   </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#eedcaa' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#f0e6c8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {selectedBuilding.name}
                       </span>
                       <span
                         style={{
-                          fontSize: 8,
-                          padding: '1px 5px',
-                          borderRadius: 3,
-                          backgroundColor: selectedBuilding.status === 'locked' ? '#2c1414' : '#0e2418',
-                          color: selectedBuilding.status === 'locked' ? '#ff6666' : '#55ff99',
+                          fontSize: 9.5,
                           fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: 3,
+                          backgroundColor: selectedBuilding.status === 'locked' ? '#2c1212' : '#0d2b1a',
+                          color: selectedBuilding.status === 'locked' ? '#ff6666' : '#2ecc71',
+                          border: `1px solid ${selectedBuilding.status === 'locked' ? '#551a1a' : '#1a4c2c'}`,
+                          flexShrink: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
                         }}
                       >
-                        {selectedBuilding.status === 'locked' ? 'Proyecto Bloqueado' : `Operativo (Tier ${selectedBuilding.tier})`}
+                        {selectedBuilding.status === 'locked' ? 'Proyecto Bloqueado' : `Tier ${selectedBuilding.tier} · Operativo`}
                       </span>
                     </div>
-                    <div style={{ fontSize: 10, color: '#688298', marginTop: 1 }}>
+                    <div style={{ fontSize: 10.5, color: '#88a2b8', marginTop: 3, lineHeight: '1.3' }}>
                       {selectedBuilding.description}
                     </div>
                   </div>
                 </div>
 
-                {/* Métricas compactas */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <MetricCard label="Eficiencia" value={`${selectedBuilding.efficiency}%`} color="#00ff88" />
-                  <MetricCard label="Durabilidad" value={`${selectedBuilding.durability}%`} color="#60b0ff" />
-                  <MetricCard label="Categoría" value={selectedBuilding.categoryLabel} color="#c09858" />
+                {/* Métricas Rápidas Alineadas */}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                  <MetricBadge label="Eficiencia" value={`${selectedBuilding.efficiency}%`} color="#2ecc71" />
+                  <MetricBadge label="Durabilidad" value={`${selectedBuilding.durability}%`} color="#3498db" />
                 </div>
               </div>
 
-              {/* Si el edificio está bloqueado: Banner compacto de Construcción */}
+              {/* Si está bloqueado: Banner de Requisitos */}
               {selectedBuilding.status === 'locked' && (
                 <div
                   style={{
-                    margin: '10px 14px 0',
-                    padding: '8px 12px',
-                    backgroundColor: '#121822',
-                    border: '1px dashed #2a3c50',
-                    borderRadius: 6,
+                    backgroundColor: '#111822',
+                    borderBottom: '1px solid #1c2a38',
+                    padding: '8px 16px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    flexShrink: 0,
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#d8b468' }}>
-                      🔒 Edificio aún no construido. Requisitos:
-                    </span>
-                    <span style={{ fontSize: 10, color: '#889eb2', marginLeft: 8 }}>
-                      {selectedBuilding.unlockCost?.map((c, i) => (
-                        <span key={i} style={{ color: '#fff', fontWeight: 600, marginRight: 8 }}>
-                          {c.icon} {c.amount} {c.name}
-                        </span>
-                      ))}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                    <span style={{ fontWeight: 700, color: '#deb870' }}>Requisitos de Construcción:</span>
+                    {selectedBuilding.unlockCost?.map((c, i) => (
+                      <span key={i} style={{ color: '#ffffff', backgroundColor: '#182432', padding: '2px 6px', borderRadius: 3 }}>
+                        {c.icon} {c.amount} {c.name}
+                      </span>
+                    ))}
                   </div>
                   <button
                     onClick={() => constructBuilding(selectedBuilding.id)}
                     style={{
-                      backgroundColor: '#1c3e5e',
+                      backgroundColor: '#1b4a6e',
                       color: '#ffffff',
-                      border: '1px solid #2e5a88',
-                      borderRadius: 5,
-                      padding: '5px 12px',
-                      fontSize: 10,
+                      border: '1px solid #2e70a0',
+                      borderRadius: 4,
+                      padding: '4px 12px',
+                      fontSize: 11,
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
@@ -407,50 +428,54 @@ export function BuildingsPanel({ onClose }: Props) {
                 </div>
               )}
 
-              {/* ── Selector de Pestañas: Gestión vs Administración ── */}
+              {/* ── Pestañas Seguras Sin Desbordamiento (34px) ── */}
               <div
                 style={{
-                  display: 'flex',
-                  borderBottom: '1px solid #142030',
-                  padding: '0 14px',
+                  height: 34,
+                  minHeight: 34,
                   backgroundColor: '#070c14',
-                  marginTop: 6,
+                  borderBottom: '1px solid #162434',
+                  display: 'flex',
+                  padding: '0 16px',
+                  gap: 16,
                   flexShrink: 0,
+                  boxSizing: 'border-box',
+                  overflow: 'hidden',
                 }}
               >
-                <DetailTabBtn
-                  label="📦 Gestión de Bodega e Inventario"
+                <TabButton
                   active={activeTab === 'gestion'}
                   onClick={() => setActiveTab('gestion')}
+                  label="📦 Bodega e Inventario"
                 />
-                <DetailTabBtn
-                  label="👥 Administración y Trabajadores"
+                <TabButton
                   active={activeTab === 'administracion'}
                   onClick={() => setActiveTab('administracion')}
+                  label="👥 Administración y Personal"
                 />
               </div>
 
-              {/* ── Contenido de la pestaña activa ── */}
-              <div style={{ padding: '10px 14px', flex: 1, overflowY: 'auto' }}>
+              {/* ── Contenido de la Pestaña Activa (Scroll Controlado) ── */}
+              <div className="b-scroll" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', boxSizing: 'border-box' }}>
                 {activeTab === 'gestion' ? (
-                  /* ════ PESTAÑA: GESTIÓN (BODEGA E INVENTARIO) ════ */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* Resumen de capacidad de bodega */}
+                  /* ══════ PESTAÑA: GESTIÓN (BODEGA) ══════ */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {/* Barra de Capacidad de Bodega */}
                     <div
                       style={{
-                        backgroundColor: '#0a121c',
-                        border: '1px solid #142232',
-                        borderRadius: 6,
+                        backgroundColor: '#0c1622',
+                        border: '1px solid #18283a',
+                        borderRadius: 5,
                         padding: '8px 12px',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#90a8c0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, color: '#90a8be' }}>
                         <span>Capacidad Total de Bodega</span>
-                        <span>
+                        <span style={{ color: '#ffffff' }}>
                           {selectedBuilding.inventory.reduce((acc, it) => acc + it.quantity, 0)} / {selectedBuilding.maxInventoryWeight} unidades
                         </span>
                       </div>
-                      <div style={{ width: '100%', height: 4, backgroundColor: '#050a10', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                      <div style={{ width: '100%', height: 5, backgroundColor: '#050a10', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
                         <div
                           style={{
                             width: `${Math.min(
@@ -460,75 +485,72 @@ export function BuildingsPanel({ onClose }: Props) {
                                 100
                             )}%`,
                             height: '100%',
-                            backgroundColor: '#2678a0',
+                            backgroundColor: '#3498db',
                             borderRadius: 2,
                           }}
                         />
                       </div>
                     </div>
 
-                    {/* Lista de Recursos / Ítems almacenados */}
+                    {/* Grilla de Recursos / Ítems */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#a0b8cc', marginBottom: 6 }}>
-                        Recursos y Bienes en Almacén ({selectedBuilding.inventory.length})
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b0c4d8', marginBottom: 6 }}>
+                        Inventario y Recursos Almacenados ({selectedBuilding.inventory.length})
                       </div>
                       {selectedBuilding.inventory.length === 0 ? (
-                        <div style={{ padding: '16px', textAlign: 'center', color: '#4a6074', fontSize: 10 }}>
-                          Bodega vacía. Este edificio aún no almacena recursos.
+                        <div style={{ padding: '24px', textAlign: 'center', color: '#556c80', fontSize: 11 }}>
+                          Este edificio no almacena recursos actualmente.
                         </div>
                       ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
                           {selectedBuilding.inventory.map((item) => {
                             const pct = Math.round((item.quantity / Math.max(1, item.maxCapacity)) * 100);
                             return (
                               <div
                                 key={item.id}
                                 style={{
-                                  backgroundColor: '#0b1420',
-                                  border: '1px solid #142436',
-                                  borderRadius: 6,
-                                  padding: '6px 10px',
+                                  backgroundColor: '#0d1824',
+                                  border: '1px solid #1a2c40',
+                                  borderRadius: 5,
+                                  padding: '8px 10px',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   gap: 4,
                                 }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ fontSize: 14 }}>{item.icon}</span>
-                                    <div>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: '#d8e4f0' }}>{item.name}</div>
-                                      <div style={{ fontSize: 8, color: '#4a6478' }}>{item.category}</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                    <span style={{ fontSize: 16 }}>{item.icon}</span>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {item.name}
+                                      </div>
+                                      <div style={{ fontSize: 9, color: '#688298' }}>{item.category}</div>
                                     </div>
                                   </div>
-                                  <div style={{ textAlign: 'right' }}>
-                                    <span style={{ fontSize: 11, fontWeight: 800, color: '#60b0ff' }}>
+                                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                    <span style={{ fontSize: 12, fontWeight: 800, color: '#8acfff' }}>
                                       {item.quantity}
                                     </span>
-                                    <span style={{ fontSize: 8, color: '#445566' }}>/{item.maxCapacity}</span>
+                                    <span style={{ fontSize: 9, color: '#667c90' }}>/{item.maxCapacity}</span>
                                   </div>
                                 </div>
 
-                                <div style={{ width: '100%', height: 3, backgroundColor: '#050a10', borderRadius: 1, overflow: 'hidden' }}>
-                                  <div
-                                    style={{
-                                      width: `${pct}%`,
-                                      height: '100%',
-                                      backgroundColor: pct > 85 ? '#d08030' : '#3878b8',
-                                    }}
-                                  />
+                                <div style={{ width: '100%', height: 3, backgroundColor: '#050a10', borderRadius: 2, overflow: 'hidden' }}>
+                                  <div style={{ width: `${pct}%`, height: '100%', backgroundColor: pct > 85 ? '#e67e22' : '#3498db' }} />
                                 </div>
 
-                                <div style={{ display: 'flex', gap: 4, marginTop: 2, justifyContent: 'flex-end' }}>
+                                <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2 }}>
                                   <button
                                     onClick={() => modifyInventoryItem(selectedBuilding.id, item.id, -10)}
                                     style={{
-                                      backgroundColor: '#101a26',
-                                      border: '1px solid #182a3c',
+                                      backgroundColor: '#122030',
+                                      border: '1px solid #1e3550',
                                       borderRadius: 3,
-                                      color: '#70a0d0',
-                                      fontSize: 9,
-                                      padding: '1px 6px',
+                                      color: '#8acfff',
+                                      fontSize: 9.5,
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
                                       cursor: 'pointer',
                                     }}
                                   >
@@ -537,12 +559,13 @@ export function BuildingsPanel({ onClose }: Props) {
                                   <button
                                     onClick={() => modifyInventoryItem(selectedBuilding.id, item.id, 10)}
                                     style={{
-                                      backgroundColor: '#101a26',
-                                      border: '1px solid #182a3c',
+                                      backgroundColor: '#122030',
+                                      border: '1px solid #1e3550',
                                       borderRadius: 3,
-                                      color: '#70a0d0',
-                                      fontSize: 9,
-                                      padding: '1px 6px',
+                                      color: '#8acfff',
+                                      fontSize: 9.5,
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
                                       cursor: 'pointer',
                                     }}
                                   >
@@ -556,33 +579,33 @@ export function BuildingsPanel({ onClose }: Props) {
                       )}
                     </div>
 
-                    {/* Ciclo de producción / Receta */}
+                    {/* Flujo de Producción */}
                     {selectedBuilding.recipe && (
                       <div
                         style={{
-                          backgroundColor: '#0a121c',
-                          border: '1px solid #142232',
-                          borderRadius: 6,
+                          backgroundColor: '#0c1622',
+                          border: '1px solid #18283a',
+                          borderRadius: 5,
                           padding: '8px 12px',
                         }}
                       >
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#d0c294', marginBottom: 4 }}>
-                          ⚡ Rendimiento Industrial por Hora
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#deb870', marginBottom: 4 }}>
+                          ⚡ Flujo de Producción por Hora
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 9, color: '#7a92a8' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 10.5, color: '#88a0b8' }}>
                           <div>
-                            <span style={{ color: '#e06060', fontWeight: 600 }}>Insumos:</span>{' '}
+                            <span style={{ color: '#e74c3c', fontWeight: 600 }}>Insumos:</span>{' '}
                             {selectedBuilding.recipe.inputs.map((inp, i) => (
-                              <span key={i} style={{ marginLeft: 3 }}>
+                              <span key={i} style={{ color: '#ffffff', marginLeft: 4 }}>
                                 {inp.icon} {inp.name} ({inp.rate})
                               </span>
                             ))}
                           </div>
                           <span style={{ color: '#3a5068' }}>➔</span>
                           <div>
-                            <span style={{ color: '#44dd88', fontWeight: 600 }}>Producción:</span>{' '}
+                            <span style={{ color: '#2ecc71', fontWeight: 600 }}>Rendimiento:</span>{' '}
                             {selectedBuilding.recipe.outputs.map((out, i) => (
-                              <span key={i} style={{ marginLeft: 3 }}>
+                              <span key={i} style={{ color: '#ffffff', marginLeft: 4 }}>
                                 {out.icon} {out.name} ({out.rate})
                               </span>
                             ))}
@@ -592,22 +615,23 @@ export function BuildingsPanel({ onClose }: Props) {
                     )}
                   </div>
                 ) : (
-                  /* ════ PESTAÑA: ADMINISTRACIÓN (TRABAJADORES Y PERMISOS) ════ */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  /* ══════ PESTAÑA: ADMINISTRACIÓN (TRABAJADORES Y JERARQUÍA) ══════ */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', boxSizing: 'border-box' }}>
+                    {/* Cabecera de puestos */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#a0b8cc' }}>
-                        Puestos y Jerarquía de Trabajo ({selectedBuilding.workers.filter(w => !!w.npcName).length} / {selectedBuilding.maxWorkers})
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#b0c4d8' }}>
+                        Puestos Asignados ({selectedBuilding.workers.filter((w) => !!w.npcName).length} / {selectedBuilding.maxWorkers})
                       </span>
-                      <span style={{ fontSize: 9, color: '#556c80' }}>
-                        Asigna colonos según su especialidad para maximizar la producción
+                      <span style={{ fontSize: 10, color: '#688298' }}>
+                        Asigna colonos con profesiones afines para maximizar la producción
                       </span>
                     </div>
 
-                    {/* Lista de puestos / slots */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {/* Lista de Puestos con Contención Estricta */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', boxSizing: 'border-box' }}>
                       {selectedBuilding.workers.length === 0 ? (
-                        <div style={{ padding: '16px', textAlign: 'center', color: '#4a6074', fontSize: 10 }}>
-                          Este edificio es residencial o no requiere operarios directos.
+                        <div style={{ padding: '24px', textAlign: 'center', color: '#556c80', fontSize: 11 }}>
+                          Este edificio es residencial y no requiere puestos de trabajo manuales.
                         </div>
                       ) : (
                         selectedBuilding.workers.map((slot, index) => {
@@ -617,48 +641,48 @@ export function BuildingsPanel({ onClose }: Props) {
                             <div
                               key={slot.id}
                               style={{
-                                backgroundColor: isAssigned ? '#0c1622' : '#080e16',
-                                border: `1px solid ${isAssigned ? '#182e44' : '#101824'}`,
+                                height: 46,
+                                backgroundColor: isAssigned ? '#0e1a26' : '#080f16',
+                                border: `1px solid ${isAssigned ? '#1c344c' : '#121d28'}`,
                                 borderRadius: 6,
-                                padding: '6px 10px',
+                                padding: '0 12px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                gap: 8,
+                                gap: 12,
+                                boxSizing: 'border-box',
+                                width: '100%',
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div
-                                  style={{
-                                    width: 22,
-                                    height: 22,
-                                    borderRadius: '50%',
-                                    backgroundColor: isAssigned ? '#12283a' : '#0f1620',
-                                    color: isAssigned ? '#60b0ff' : '#3c4e60',
-                                    fontSize: 9,
-                                    fontWeight: 700,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}
-                                >
+                              {/* Lado Izquierdo: Info del Puesto y Trabajador */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: isAssigned ? '#3498db' : '#445868', flexShrink: 0 }}>
                                   #{index + 1}
-                                </div>
-
-                                <div>
+                                </span>
+                                <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: isAssigned ? '#ffffff' : '#587084' }}>
-                                      {isAssigned ? slot.npcName : `Puesto Vacante (${slot.professionRequired})`}
+                                    <span
+                                      style={{
+                                        fontSize: 11.5,
+                                        fontWeight: 700,
+                                        color: isAssigned ? '#ffffff' : '#60788c',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {isAssigned ? slot.npcName : `Vacante (${slot.professionRequired})`}
                                     </span>
                                     {isAssigned && <RoleBadge role={slot.role} />}
                                   </div>
-                                  <div style={{ fontSize: 8, color: '#3c5266', marginTop: 1 }}>
-                                    Requerido: {slot.professionRequired} · Eficiencia: {slot.efficiency}%
+                                  <div style={{ fontSize: 9.5, color: '#556e84', marginTop: 1, whiteSpace: 'nowrap' }}>
+                                    Req: {slot.professionRequired} {isAssigned && `· Eficiencia: ${slot.efficiency}%`}
                                   </div>
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {/* Lado Derecho: Controles de Rol y Asignación */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                                 {isAssigned ? (
                                   <>
                                     <select
@@ -667,13 +691,14 @@ export function BuildingsPanel({ onClose }: Props) {
                                         changeWorkerRole(selectedBuilding.id, slot.id, e.target.value as HierarchyRole)
                                       }
                                       style={{
-                                        backgroundColor: '#070e16',
-                                        color: '#60a0d0',
-                                        border: '1px solid #162a3c',
+                                        backgroundColor: '#0a1420',
+                                        color: '#8acfff',
+                                        border: '1px solid #1a2e42',
                                         borderRadius: 4,
-                                        padding: '2px 6px',
-                                        fontSize: 9,
+                                        padding: '4px 8px',
+                                        fontSize: 10.5,
                                         cursor: 'pointer',
+                                        outline: 'none',
                                       }}
                                     >
                                       <option value="trabajador">Trabajador</option>
@@ -684,14 +709,14 @@ export function BuildingsPanel({ onClose }: Props) {
 
                                     <button
                                       onClick={() => removeWorker(selectedBuilding.id, slot.id)}
-                                      title="Desasignar colono"
                                       style={{
-                                        backgroundColor: '#180a0a',
-                                        color: '#e05555',
-                                        border: '1px solid #301414',
+                                        backgroundColor: '#200c0c',
+                                        color: '#ff6666',
+                                        border: '1px solid #4a1c1c',
                                         borderRadius: 4,
-                                        padding: '2px 6px',
-                                        fontSize: 9,
+                                        padding: '4px 10px',
+                                        fontSize: 10.5,
+                                        fontWeight: 600,
                                         cursor: 'pointer',
                                       }}
                                     >
@@ -699,21 +724,22 @@ export function BuildingsPanel({ onClose }: Props) {
                                     </button>
                                   </>
                                 ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <select
                                       value={selectedNpcForSlot[slot.id] || (liveNpcNames[0] ?? '')}
                                       onChange={(e) =>
                                         setSelectedNpcForSlot((prev) => ({ ...prev, [slot.id]: e.target.value }))
                                       }
                                       style={{
-                                        backgroundColor: '#070e16',
-                                        color: '#d0dce8',
-                                        border: '1px solid #162a3c',
+                                        backgroundColor: '#0a1420',
+                                        color: '#ffffff',
+                                        border: '1px solid #1a2e42',
                                         borderRadius: 4,
-                                        padding: '2px 6px',
-                                        fontSize: 9,
+                                        padding: '4px 8px',
+                                        fontSize: 10.5,
+                                        maxWidth: 130,
                                         cursor: 'pointer',
-                                        maxWidth: 120,
+                                        outline: 'none',
                                       }}
                                     >
                                       {liveNpcNames.length > 0 ? (
@@ -727,45 +753,21 @@ export function BuildingsPanel({ onClose }: Props) {
                                       )}
                                     </select>
 
-                                    <select
-                                      value={selectedRoleForSlot[slot.id] || 'trabajador'}
-                                      onChange={(e) =>
-                                        setSelectedRoleForSlot((prev) => ({
-                                          ...prev,
-                                          [slot.id]: e.target.value as HierarchyRole,
-                                        }))
-                                      }
-                                      style={{
-                                        backgroundColor: '#070e16',
-                                        color: '#60a0d0',
-                                        border: '1px solid #162a3c',
-                                        borderRadius: 4,
-                                        padding: '2px 6px',
-                                        fontSize: 9,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <option value="trabajador">Trabajador</option>
-                                      <option value="supervisor">Supervisor</option>
-                                      <option value="administrador">Administrador</option>
-                                      <option value="maestro">Maestro</option>
-                                    </select>
-
                                     <button
                                       onClick={() => {
                                         const candidate =
                                           selectedNpcForSlot[slot.id] ||
                                           (liveNpcNames.length > 0 ? liveNpcNames[0] : 'Colono Voluntario');
-                                        const role = selectedRoleForSlot[slot.id] || 'trabajador';
+                                        const role = slot.role || 'trabajador';
                                         assignWorker(selectedBuilding.id, slot.id, candidate, role);
                                       }}
                                       style={{
-                                        backgroundColor: '#163048',
-                                        color: '#70c0ff',
-                                        border: '1px solid #22486c',
+                                        backgroundColor: '#1b4a6e',
+                                        color: '#ffffff',
+                                        border: '1px solid #2e70a0',
                                         borderRadius: 4,
-                                        padding: '2px 8px',
-                                        fontSize: 9,
+                                        padding: '4px 12px',
+                                        fontSize: 10.5,
                                         fontWeight: 700,
                                         cursor: 'pointer',
                                       }}
@@ -781,24 +783,26 @@ export function BuildingsPanel({ onClose }: Props) {
                       )}
                     </div>
 
-                    {/* Resumen de Jerarquías */}
+                    {/* Resumen de Jerarquías Cuadrado y Simétrico */}
                     <div
                       style={{
-                        backgroundColor: '#070c14',
-                        border: '1px solid #101c2a',
+                        backgroundColor: '#080e16',
+                        border: '1px solid #142232',
                         borderRadius: 6,
-                        padding: '8px 10px',
+                        padding: '8px 12px',
                         marginTop: 4,
+                        boxSizing: 'border-box',
+                        width: '100%',
                       }}
                     >
-                      <div style={{ fontSize: 9, fontWeight: 700, color: '#7094b0', marginBottom: 4 }}>
-                        🛡️ Jerarquías y Permisos Feudales:
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#88a0b8', marginBottom: 6 }}>
+                        🛡️ Jerarquías Feudales y Niveles de Acceso:
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 4, fontSize: 8, color: '#556e84' }}>
-                        <div><strong style={{ color: '#00ff88' }}>Trabajador:</strong> Faenas ordinarias y consumo.</div>
-                        <div><strong style={{ color: '#60b0ff' }}>Supervisor:</strong> Coordinación de turnos (+10% ef.).</div>
-                        <div><strong style={{ color: '#b070f0' }}>Administrador:</strong> Control de bodega y balances.</div>
-                        <div><strong style={{ color: '#ffcc00' }}>Maestro:</strong> Recetas maestras y aprendices.</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px 16px', fontSize: 9.5, color: '#7a96ae' }}>
+                        <div><strong style={{ color: '#2ecc71' }}>• Trabajador:</strong> Ejecuta faenas operativas básicas y consume insumos.</div>
+                        <div><strong style={{ color: '#3498db' }}>• Supervisor:</strong> Coordina turnos y previene desperdicios (+10% ef.).</div>
+                        <div><strong style={{ color: '#c084fc' }}>• Administrador:</strong> Acceso a bodega y balances contables del edificio.</div>
+                        <div><strong style={{ color: '#f1c40f' }}>• Maestro Artesano:</strong> Habilita recetas maestras y entrena aprendices.</div>
                       </div>
                     </div>
                   </div>
@@ -812,63 +816,44 @@ export function BuildingsPanel({ onClose }: Props) {
   );
 }
 
-function FilterTabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function SegmentBtn({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       style={{
-        backgroundColor: active ? '#142436' : 'transparent',
-        color: active ? '#7ac4f0' : '#5a7288',
+        backgroundColor: active ? '#1a3048' : 'transparent',
+        color: active ? '#8acfff' : '#688298',
         border: 'none',
-        borderRadius: 4,
+        borderRadius: 3,
         padding: '3px 8px',
         fontSize: 10,
         fontWeight: active ? 700 : 500,
         cursor: 'pointer',
-        transition: 'all 0.1s ease',
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function CategoryChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        backgroundColor: active ? '#182b40' : '#0c1420',
-        color: active ? '#8acfff' : '#607890',
-        border: `1px solid ${active ? '#2c547c' : '#142232'}`,
-        borderRadius: 12,
-        padding: '2px 8px',
-        fontSize: 9,
-        fontWeight: active ? 700 : 500,
-        cursor: 'pointer',
         whiteSpace: 'nowrap',
-        transition: 'all 0.1s ease',
       }}
     >
-      {label}
+      {label} ({count})
     </button>
   );
 }
 
-function DetailTabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       style={{
         backgroundColor: 'transparent',
-        color: active ? '#70c0ff' : '#506880',
+        color: active ? '#8acfff' : '#60788c',
         border: 'none',
-        borderBottom: `2px solid ${active ? '#3080d0' : 'transparent'}`,
-        padding: '6px 12px',
-        fontSize: 11,
+        borderBottom: `2px solid ${active ? '#357ebd' : 'transparent'}`,
+        padding: '0 4px',
+        fontSize: 11.5,
         fontWeight: active ? 700 : 500,
         cursor: 'pointer',
-        transition: 'all 0.1s ease',
+        height: '100%',
+        whiteSpace: 'nowrap',
+        display: 'inline-flex',
+        alignItems: 'center',
       }}
     >
       {label}
@@ -876,18 +861,18 @@ function DetailTabBtn({ label, active, onClick }: { label: string; active: boole
   );
 }
 
-function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
+function MetricBadge({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div
       style={{
-        backgroundColor: '#080e18',
-        border: '1px solid #121e2e',
-        borderRadius: 5,
-        padding: '3px 8px',
+        backgroundColor: '#0d1824',
+        border: '1px solid #1a2c3e',
+        borderRadius: 4,
+        padding: '2px 8px',
         textAlign: 'right',
       }}
     >
-      <div style={{ fontSize: 7, color: '#4a5e70', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 8, color: '#688298' }}>{label}</div>
       <div style={{ fontSize: 11, fontWeight: 800, color }}>{value}</div>
     </div>
   );
@@ -895,22 +880,24 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
 
 function RoleBadge({ role }: { role: HierarchyRole }) {
   const config = {
-    maestro: { label: 'Maestro', color: '#ffcc00', bg: '#241c00' },
-    administrador: { label: 'Admin', color: '#b870f0', bg: '#1e0c2e' },
-    supervisor: { label: 'Supervisor', color: '#60b0ff', bg: '#0c1c2e' },
-    trabajador: { label: 'Trabajador', color: '#00ff88', bg: '#081e14' },
+    maestro: { label: 'Maestro', color: '#f1c40f', bg: '#2b2200' },
+    administrador: { label: 'Admin', color: '#c084fc', bg: '#200e2e' },
+    supervisor: { label: 'Supervisor', color: '#3498db', bg: '#0d2238' },
+    trabajador: { label: 'Trabajador', color: '#2ecc71', bg: '#0a2616' },
   }[role];
 
   return (
     <span
       style={{
-        fontSize: 8,
+        fontSize: 8.5,
         fontWeight: 700,
         padding: '1px 5px',
         borderRadius: 3,
         backgroundColor: config.bg,
         color: config.color,
-        border: `1px solid ${config.color}33`,
+        border: `1px solid ${config.color}44`,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {config.label}
