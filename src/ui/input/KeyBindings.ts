@@ -108,6 +108,19 @@ const pressedKeys = new Set<string>();
 const justPressedKeys = new Set<string>();
 let isRebinding = false;
 let isConsoleOpen = false;
+let isInventoryOpen = false;
+
+export function setInventoryOpen(value: boolean) {
+  isInventoryOpen = value;
+  if (value) {
+    pressedKeys.clear();
+    justPressedKeys.clear();
+  }
+}
+
+export function isInventoryOpenActive(): boolean {
+  return isInventoryOpen;
+}
 
 export function setRebinding(value: boolean) {
   isRebinding = value;
@@ -140,7 +153,7 @@ export function isConsoleOpenActive(): boolean {
 }
 
 export function isGameInputBlocked(): boolean {
-  if (isRebinding || isConsoleOpen) return true;
+  if (isRebinding || isConsoleOpen || isInventoryOpen) return true;
   // Fallback robusto: si un input/textarea está enfocado, bloquear juego para priorizar escritura
   // Esto cubre casos donde el flag aún no se sincronizó o hay duplicación de módulo
   if (typeof document !== "undefined") {

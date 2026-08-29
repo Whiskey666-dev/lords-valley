@@ -4,12 +4,16 @@ import { getBinding, isRebindingActive, isConsoleOpenActive } from '../ui/input/
 import { TutorialPanel } from '../ui/menus/TutorialPanel';
 import { Navbar } from '../ui/menus/Navbar';
 import { Console } from '../ui/menus/Console';
+import { SettingsPanel } from '../ui/menus/SettingsPanel';
 import { NpcPanel, type NpcPanelData } from '../ui/character/NpcPanel';
+import { PlayerInventoryPanel } from '../ui/inventory/PlayerInventoryPanel';
 
 function App() {
     const gameRef = useRef<Phaser.Game | null>(null);
     const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
     const [showTutorial, setShowTutorial] = useState(false);
+    const [showPlayerInventory, setShowPlayerInventory] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [zoom, setZoom] = useState(50); // 0% alejar - 50% defecto - 100% acercar
 
     useEffect(() => {
@@ -45,9 +49,16 @@ function App() {
             const customEvent = event as CustomEvent<NpcPanelData>;
             console.log("[App] phaser-npc-selected recibido", customEvent.detail);
             setSelectedNPC(customEvent.detail);
+            setShowPlayerInventory(false);
         };
         const handleNPCClose = () => setSelectedNPC(null);
         const handleToggleTutorial = () => setShowTutorial(prev => !prev);
+        const handleInventory = () => {
+            setSelectedNPC(null);
+            setShowTutorial(false);
+            setShowPlayerInventory(prev => !prev);
+        };
+        const handleInventoryClose = () => setShowPlayerInventory(false);
         const handleZoomSync = (e: Event) => {
             const z = (e as CustomEvent<number>).detail;
             if (typeof z === "number") setZoom(Math.min(100, Math.max(0, Math.round(z))));
@@ -59,6 +70,8 @@ function App() {
 
         window.addEventListener('phaser-npc-selected', handleNPCSelect);
         window.addEventListener('phaser-npc-deselected', handleNPCClose);
+        window.addEventListener('phaser-npc-deselected', handleInventoryClose);
+        window.addEventListener('phaser-action-inventory', handleInventory as EventListener);
         window.addEventListener('phaser-toggle-tutorial', handleToggleTutorial);
         window.addEventListener('phaser-zoom-sync', handleZoomSync as EventListener);
         window.addEventListener('wheel', handleWheel, { passive: false });
@@ -66,6 +79,8 @@ function App() {
         return () => {
             window.removeEventListener('phaser-npc-selected', handleNPCSelect);
             window.removeEventListener('phaser-npc-deselected', handleNPCClose);
+            window.removeEventListener('phaser-npc-deselected', handleInventoryClose);
+            window.removeEventListener('phaser-action-inventory', handleInventory as EventListener);
             window.removeEventListener('phaser-toggle-tutorial', handleToggleTutorial);
             window.removeEventListener('phaser-zoom-sync', handleZoomSync as EventListener);
             window.removeEventListener('wheel', handleWheel);
@@ -105,13 +120,23 @@ function App() {
         });
     };
 
+    const handleOpenSettings = () => {
+        setSelectedNPC(null);
+        setShowTutorial(false);
+        setShowPlayerInventory(false);
+        setShowSettings(true);
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', backgroundColor: '#111111', color: '#ffffff', fontFamily: 'sans-serif', overflow: 'hidden', position: 'relative' }}>
             {/* Navbar delgada modular en ui/menus/Navbar.tsx */}
-            <Navbar onToggleTutorial={() => setShowTutorial(v => !v)} zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
+            <Navbar onOpenSettings={handleOpenSettings} zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
 
             {/* Panel tutorial modularizado en ui/menus/TutorialPanel.tsx */}
             <TutorialPanel show={showTutorial} onClose={() => setShowTutorial(false)} />
+
+            {/* Panel de configuración categorizado en ui/menus/SettingsPanel.tsx */}
+            {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
             {/* Consola de comandos - ENTER para abrir, createNpc1..10 */}
             <Console />
@@ -120,6 +145,7 @@ function App() {
                 <div id="game-container" style={{ flex: 1, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }} />
 
             {selectedNPC && <NpcPanel npc={selectedNPC} onClose={() => setSelectedNPC(null)} />}
+            {showPlayerInventory && <PlayerInventoryPanel onClose={() => setShowPlayerInventory(false)} />}
             </div>
         </div>
     );
