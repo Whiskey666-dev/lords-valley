@@ -1,12 +1,9 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../../app/store/useGameStore';
-
-const CHUNK_PX = 1024;
-const TILE = 32;
-const CHUNK_TILES = 32;
+import { CHUNK_PX, CHUNK_TILES, TILE, BASE_GREEN, WATER_DARK, TREE_BROWN, isWaterTile, isTreeTile, getMineralType, getMineralColor } from '../world/Terrain';
 
 export class ChunkRenderer {
-  private rendered = new Map<string, Phaser.GameObjects.Group>();
+  private rendered = new Map<string, Phaser.GameObjects.Container>();
   private pending = new Set<string>();
   private lastCenter = { x: 0, y: 0 };
   private scene: Phaser.Scene;
@@ -29,11 +26,9 @@ export class ChunkRenderer {
     const centerChunk = this.worldToChunk(centerX, centerY);
 
     const dist = Phaser.Math.Distance.Between(centerX, centerY, this.lastCenter.x, this.lastCenter.y);
-    // Refinement B: Umbral de movimiento para evitar actualizaciones innecesarias
     if (dist < 512 && this.rendered.size > 0) return;
     this.lastCenter = { x: centerX, y: centerY };
 
-    // Determinar chunks necesarios alrededor del centro
     const neededChunks: string[] = [];
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -44,14 +39,11 @@ export class ChunkRenderer {
       }
     }
 
-    // Filtrar solo los que no están renderizados ni en carga
     const missingChunks = neededChunks.filter(
       key => !this.rendered.has(key) && !this.pending.has(key)
     );
 
-    // Refinement B: Cargar chunks faltantes en paralelo con Promise.all
     if (missingChunks.length > 0) {
-      // Registrar inmediatamente en el Set para evitar peticiones duplicadas paralelas
       missingChunks.forEach(cid => this.pending.add(cid));
 
       await Promise.all(missingChunks.map(async (key) => {
@@ -67,7 +59,6 @@ export class ChunkRenderer {
       }));
     }
 
-    // Unload far (distance >1)
     for (const key of Array.from(this.rendered.keys())) {
       if (!neededChunks.includes(key)) {
         const g = this.rendered.get(key);
@@ -77,48 +68,41 @@ export class ChunkRenderer {
     }
   }
 
-  private loadChunkData(key: string, chunk: any) {
+  private loadChunkData(key: string, _chunk: any) {
     const [cx, cy] = key.split(':').map(Number);
-    const group = this.scene.add.group();
-    const tiles: number[][] = chunk.tiles as number[][];
+    const container = this.scene.add.container(0, 0);
+    container.setDepth(-10);
 
+    const terrain = this.scene.add.graphics();
+    terrain.setDepth(-10);
+
+    // Base: por tile pequeño (32px) - agua > minerales vetas > árboles 20-70% > verde
     for (let y = 0; y < CHUNK_TILES; y++) {
       for (let x = 0; x < CHUNK_TILES; x++) {
-        const gid = tiles[y]?.[x] ?? 1;
-        const color = this.gidToColor(gid);
-        const rect = this.scene.add.rectangle(
-          cx * CHUNK_PX + x * TILE + TILE / 2,
-          cy * CHUNK_PX + y * TILE + TILE / 2,
-          TILE, TILE,
-          color,
-          1,
-        );
-        rect.setDepth(-10); // terreno siempre detrás de entidades
-        rect.setStrokeStyle(1, 0x000000, 0.05);
-        group.add(rect);
-        if (gid === 101 || gid === 102) {
-          rect.setFillStyle(0x555555);
+        const worldTileX = cx * CHUNK_TILES + x;
+        const worldTileY = cy * CHUNK_TILES + y;
+        let color: number;
+        const mineralType = getMineralType(worldTileX, worldTileY);
+        if (isWaterTile(worldTileX, worldTileY)) {
+          color = WATER_DARK;
+        } else if (mineralType) {
+          color = getMineralColor(mineralType);
+        } else if (isTreeTile(cx, cy, x, y)) {
+          color = TREE_BROWN;
+        } else {
+          color = BASE_GREEN;
         }
+        terrain.fillStyle(color, 1);
+        terrain.fillRect(cx * CHUNK_PX + x * TILE, cy * CHUNK_PX + y * TILE, TILE, TILE);
       }
     }
-    // Resources overlay - encima del terreno pero debajo de survivors
-    const resources = (chunk.resources as any[]) ?? [];
-    for (const r of resources) {
-      const c = this.scene.add.circle(r.posX, r.posY, 6, 0xffd700, 0.9);
-      c.setDepth(0);
-      c.setStrokeStyle(1, 0x000000);
-      group.add(c);
-    }
 
-    this.rendered.set(key, group);
-  }
+    // Borde sutil chunk
+    terrain.lineStyle(1, 0x1a2e1a, 0.06);
+    terrain.strokeRect(cx * CHUNK_PX, cy * CHUNK_PX, CHUNK_PX, CHUNK_PX);
 
-  private gidToColor(gid: number): number {
-    if (gid === 1) return 0x2d5a27; // grass
-    if (gid === 2) return 0x8b7355; // dirt
-    if (gid === 5) return 0x1a4d1a; // forest
-    if (gid === 101) return 0x5a5a5a; // rock
-    if (gid === 102) return 0x2e86ab; // water
-    return 0x2d5a27;
+    container.add(terrain);
+
+    this.rendered.set(key, container);
   }
 }

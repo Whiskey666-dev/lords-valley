@@ -1,54 +1,50 @@
-# ai / Context — Inteligencia Artificial de NPCs
+# ai / Context — Inteligencia Artificial de NPCs (Stubs)
 
 ## Propósito
-Módulo de **autonomía de NPCs** para Lords Valley. Cuando un `Survivor` no recibe orden directa del jugador, este módulo decide qué hacer. Es el cerebro del colony-sim (equivalente a la IA de RimWorld).
+Autonomía de NPCs. Cuando `Survivor` no recibe orden directa, este módulo decide qué hacer. Cerebro colony-sim (RimWorld-like).
 
-## Estado Actual
-> **STUB — 4 archivos vacíos (0 líneas).** No hay lógica activa. `characters/Survivor.ts:114` `updateEntity()` solo hace `idle()` y expone stubs `moverEnDireccion/saltar/dash/atacar()` esperando a que este módulo los llame. Ningún import desde `ai/` existe aún.
+## Estado Real
+> **STUB — 4 archivos 0 bytes, sin lógica activa.** `characters/Survivor:120 updateEntity` solo `idle()` + `setVelocity 0` y expone API `moverEnDireccion/saltar/dash/atacar()` esperando a `ai/*`. Ningún import desde `ai/` existe.
+
+| Archivo | Bytes | Estado |
+|---|---|---|
+| `TaskSystem.ts` | 0 | Vacío |
+| `Pathfinding.ts` | 0 | Vacío |
+| `NeedsSystem.ts` | 0 | Vacío |
+| `DecisionSystem.ts` | 0 | Vacío |
 
 ## Archivos (previstos)
 | Archivo | Rol Previsto |
 |---|---|
-| `TaskSystem.ts` | Cola de tareas priorizadas. `Task { id, type, priority, target: Vector2, buildingId?, itemId? }`. Asigna `Job` de `settlement/Jobs` a `Survivor` libre. |
-| `Pathfinding.ts` | Pathfinding A* sobre grilla de `world/Chunks` / `world/Map`. `findPath(start, end): Direction8[]`. Debe evitar colisiones y edificios. |
-| `NeedsSystem.ts` | Tick periódico de necesidades. Llama `characters/Needs.simularNecesidades()` (`hambre+=0.1, sed+=0.2` c/ tick lento) y dispara urgencia si `hambre/sed/sueño > 80`. |
-| `DecisionSystem.ts` | Scoring de utilidades. `evaluate(survivor): TaskType`. Formula: `utility = needs*weights + personality + traits + skills + loyalty`. Ej: `hambre alta + comida disponible => Task COMER`. |
+| `TaskSystem.ts` | Cola priorizada `Task {id,type,priority,target:Vector2,buildingId?,itemId?}`. Asigna `Job` de `settlement/Jobs` a `Survivor` libre. |
+| `Pathfinding.ts` | A* sobre grilla `game/world/Terrain` (`isWaterTile`, `CHUNK_TILES`) / `world/Chunks`. `findPath(start,end):Direction8[]` evita colisiones edificios. |
+| `NeedsSystem.ts` | Tick `Needs.simularNecesidades()` (`hambre+=0.1, sed+=0.2`) cada X s via `world/Time`, dispara urgencia si `>80`. |
+| `DecisionSystem.ts` | Utility scoring `evaluate(survivor):TaskType` `utility = needs*weights + personality + traits + skills + loyalty`. Ej. `hambre alta + comida disponible → COMER`. |
 
 ## Lógica Prevista / Flujo
 ```
-world/Time tick (cada X seg)
-  -> NeedsSystem.update(dt)  // incrementa hambre/sed, check umbrales
-  -> DecisionSystem.evaluate(survivor) // scoring por survivor
-  -> TaskSystem.assign(survivor, bestTask) // encola segun prioridad
-  -> Pathfinding.findPath(survivor.pos, target.pos)
-  -> Survivor.moverEnDireccion(dir) / Survivor.atacar() / etc.
-  loop hasta completar task -> liberar y re-evaluar
+game/world/Terrain + world/Time tick (cada X s)
+  → NeedsSystem.update(dt) // hambre/sed check umbrales
+  → DecisionSystem.evaluate(survivor) // scoring por survivor
+  → TaskSystem.assign(survivor,bestTask) // encola prioridad
+  → Pathfinding.findPath(pos,target) // A* sobre Terrain
+  → Survivor.moverEnDireccion(dir) / atacar() / etc.
+  loop hasta completar → liberar y re-evaluar
 ```
 
-## Dependencias
-- **Consume:** `characters/Survivor`, `characters/Needs`, `characters/Personality`, `characters/Traits`, `characters/Skills`, `characters/Loyalty`, `settlement/Jobs`, `settlement/Orders`, `world/Chunks`, `world/Map`, `world/Time`
-- **Provee a:** `characters/Survivor` (llamando sus métodos de movimiento/acción), `game/scenes/MainScene` (podría llamarse desde `MainScene.update`)
-- **No depende de:** `ui/`, `combat/` directamente (aunque `Task` de combate delega a `combat/CombatSystem`)
+## Dependencias Previstas
+- **Consume:** `characters/Survivor/Needs/Personality/Traits/Skills/Loyalty`, `settlement/Jobs/Orders`, `game/world/Terrain`, `world/Time`
+- **Provee a:** `characters/Survivor` (llamando `moverEnDireccion`), `game/scenes/MainScene` (tick `update`)
+- **No depende de:** `ui/` directo (aunque `Task` combate delega a `combat/CombatSystem`)
 
-## Diseño Sugerido para Implementación
+## Diseño Sugerido
 ```ts
-// ai/TaskSystem.ts
-interface Task { id: string; type: 'comer'|'beber'|'dormir'|'trabajar'|'construir'|'patrullar'; priority: number; target: Phaser.Math.Vector2; buildingId?: string; itemId?: string; assignedTo?: string; }
-class TaskSystem { queue: Task[]; assign(s: Survivor): Task | null; complete(id: string): void; }
-
-// ai/DecisionSystem.ts
-function scoreTask(survivor: Survivor, task: Task): number // + intra-traits
-// ai/NeedsSystem.ts
-function updateNeeds(survivors: Survivor[], dt: number)
-// ai/Pathfinding.ts
-function findPath(start: Vector2, end: Vector2, chunks: Chunks): Direction8[]
+interface Task { id:string; type:'comer'|'beber'|'dormir'|'trabajar'|'construir'|'patrullar'; priority:number; target:Phaser.Math.Vector2; buildingId?:string; itemId?:string; assignedTo?:string; }
+class TaskSystem { queue:Task[]; assign(s:Survivor):Task|null; complete(id:string):void; }
+function scoreTask(s:Survivor, t:Task):number
+function updateNeeds(survivors:Survivor[], dt:number)
+function findPath(start:Vector2,end:Vector2, terrain:Terrain):Direction8[]
 ```
-
-## Interacción con Otros Módulos (cuando se implemente)
-- `world/Time` es el reloj que dispara el tick.
-- `settlement/Jobs` es la fuente de trabajo (construir, cosechar).
-- `buildings/Construction` provee targets de construcción.
-- `combat/CombatSystem` para tareas de defensa/huida.
 
 ## Para Repomix
-Este módulo es el **mayor gap** hacia la visión colony-sim. Prioridad alta. Al implementar, mantener desacoplado de Phaser `Scene` — recibir `Scene` solo en `Pathfinding` para acceso a colisiones.
+Mayor gap colony-sim, prioridad alta. Al implementar mantener desacoplado de `Scene` — recibir `Scene` solo en `Pathfinding` para colisiones. Usar `game/world/Terrain:WORLD_*` para grid, no `world/Chunks` stub. `SurvivorSprite` interpolado (`game/entities`) puede ser target de Pathfinding.

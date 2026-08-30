@@ -1,46 +1,32 @@
-# buildings / Context — Sistema de Construcción y Producción
+# buildings / Context — Sistema de Construcción y Producción (Stubs)
 
 ## Propósito
-Módulo de **colonia city-builder**. Gestiona colocación, construcción progresiva y producción de edificios (casas, talleres, granjas, almacenes). Es el output tangible de la economía del asentamiento.
+Módulo **colony city-builder**: colocación, construcción progresiva y producción de edificios (casas, talleres, granjas, almacenes). Output tangible de la economía.
 
-## Estado Actual
-> **STUB — 3 archivos vacíos (0 líneas).** Sin lógica activa. `ui/menus/Navbar.tsx:93` botón "Construcción" ya dispara `phaser-action-construction` pero no hay listener. Ningún `Building` se instancia en `game/scenes/MainScene`.
+## Estado Real
+> **STUB — 3 archivos 0 bytes, sin lógica activa.** `BuildingsPanel` y `hooks/buildings/buildingsData.ts` (1548 líneas, 40+ edificios mock) viven en `ui/buildings/` + `hooks/buildings/` y **no** usan este módulo. `Navbar` botón Construcción dispara `phaser-action-construction` sin listener real.
 
-## Archivos (previstos)
+| Archivo | Bytes | Estado |
+|---|---|---|
+| `Building.ts` | 0 | Vacío |
+| `Construction.ts` | 0 | Vacío |
+| `Production.ts` | 0 | Vacío |
+
+Real implementado:
+- `hooks/buildings/buildingsData.ts:1` 1548 líneas: `BuildingCategory 7` (extraction/industry/logistics/residential/tech/culture/military), `BuildingStatus existing|locked`, `HierarchyRole trabajador/supervisor/administrador/maestro`, `StoredItem`, `WorkerSlot`, `BuildingRecipe`, `BuildingData {id,name,category,tier,icon,description,durability,efficiency,level,maxWorkers,workers[],inventory[],recipe,unlockCost}`, `CATEGORY_INFO`, `INITIAL_BUILDINGS[40+]` (Cabaña Leñadores, Cantera, Mina Carbón locked, Mina Hierro locked, Aserradero, Silo, Almacén Central, Campamento Chozas, Taberna, Plaza Mercado, Capilla, etc) con workers mocks y recetas.
+- `hooks/buildings/useBuildings:201` CRUD `assignWorker/removeWorker/changeWorkerRole/modifyInventoryItem/constructBuilding`, filtros `filterMode all|existing|locked`, `selectedCategory`, `searchQuery`, `activeTab gestion|administracion`.
+- `ui/buildings/BuildingsPanel:908` modal `1060×670 #0c141f` con lista 310px y detalle gestión (bodega `progress maxInventoryWeight`, recipe inputs→outputs) / administración (puestos `#1..` + RoleBadge).
+
+## Archivos (previstos en este módulo, no en hooks)
 | Archivo | Rol Previsto |
 |---|---|
-| `Building.ts` | Entidad base. `class Building { id, type, x,y, hp, state:'blueprint'\|'construction'\|'built', requiredResources: Map<string,number>, workersAssigned: string[], sprite?: Phaser.GameObjects.Sprite }` + colisión Arcade. Tipos: `house`, `workshop`, `farm`, `storage`, `wall`. |
-| `Construction.ts` | Lógica de obra. Ghost preview al colocar, validación de recursos vía `items/Inventory` / `settlement/Economy`, progreso `progress 0..100` tick dependiente de `characters/Skills.construccion` y `settlement/Jobs` asignados, consumo de recursos al completar. |
-| `Production.ts` | Recetas y producción continua. `Recipe { inputs: Resource[], outputs: Item[], time: number }`. Consume `items/Resources`, produce `items/Food`/`items/Equipment`. Tick en `world/Time`, requiere trabajador asignado y edificio en estado `built`. |
+| `Building.ts` | Entidad base `class Building {id,type,x,y,hp,state:'blueprint'|'construction'|'built', requiredResources, workersAssigned, sprite?:Sprite}` tipos `house|workshop|farm|storage|wall`. |
+| `Construction.ts` | Ghost preview, validación `Economy.canAfford`, progress `0..100` tick `Skills.construccion`, consumo recursos. |
+| `Production.ts` | `Recipe {inputs,outputs,time}` tick `world/Time`, requiere `built` + worker. |
 
-## Lógica Prevista / Flujo
-```
-Jugador click "Construcción" (Navbar) -> phaser-action-construction
-  -> Construction.showGhost(type, x,y) // valida settlement/Economy.canAfford
-  -> Building.create(blueprint) // sprite fantasma + requiredResources
-  -> Jobs.create({type:'construir', buildingId, priority}) // settlement/Jobs
-  -> ai/TaskSystem asigna Survivor con skill construccion
-  -> Construction.tick(dt) // progress += skill*dt, consume stamina
-  -> Building.state='built' -> Production.enable(recipes)
-  -> Production.tick(dt) // input->output cada Time tick
-```
-
-## Dependencias
-- **Consume:** `items/Inventory`, `items/Resources`, `items/Item`, `characters/Skills`, `characters/Survivor`, `settlement/Jobs`, `settlement/Economy`, `settlement/Settlement`, `world/Time`, `ai/TaskSystem`, `ai/Pathfinding`
-- **Provee a:** `settlement/Settlement` (lista de edificios), `game/scenes/MainScene` (sprites/colisiones), `ui/menus/Navbar` (ghost UI futuro)
-- **No hay imports activos aún.**
-
-## Diseño Sugerido
-```ts
-// buildings/Building.ts
-type BuildingState = 'blueprint' | 'construction' | 'built';
-type BuildingType = 'house'|'workshop'|'farm'|'storage'|'wall';
-class Building { constructor(type:BuildingType, x:number,y:number) /* ... */ }
-
-// buildings/Construction.ts
-function canPlace(type: BuildingType, x:number,y:number, economy: Economy): boolean
-function tickConstruction(buildings: Building[], dt:number, workers: Survivor[]): void
-```
+## Dependencias Previstas
+- **Consume:** `items/Inventory/Resources`, `characters/Skills/Survivor`, `settlement/Jobs/Economy`, `ai/TaskSystem`, `world/Time`
+- **Provee a:** `settlement/Settlement`, `game/scenes/MainScene` (sprites/colisiones), `ui/buildings/BuildingsPanel` (cuando migre de mock)
 
 ## Para Repomix
-Prioridad media-alta. Implementar `Building` primero como data + sprite estático, luego `Construction` con `Jobs` integration. Mantener `Production` desacoplado (puede ser sistema separado que itera `buildings` cada `Time` tick).
+Prioridad media. Implementar `Building` primero como data+sprite estático `Phaser.GameObjects.Sprite` arcade, luego `Construction` con `Jobs` integration. Reusar `hooks/buildings/buildingsData` como schema referencia pero no duplicar — migrar su `BuildingData` a este módulo cuando se implemente persistencia core.

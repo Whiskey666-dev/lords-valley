@@ -1,17 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useGameStore } from "../../app/store/useGameStore";
+import { isWaterTile, isTreeTile, getMineralType, getMineralCss, gidToCss as terrainGidToCss } from "../../game/world/Terrain";
 
 export const WORLD_SIZE = 6144;
 export const DEFAULT_MINI_SIZE = 145;
 export const EXPANDED_MINI_SIZE = 240;
 
 export function gidToColor(gid: number): string {
-  if (gid === 1) return "#2d5a27";
-  if (gid === 2) return "#8b7355";
-  if (gid === 5) return "#1a4d1a";
-  if (gid === 101) return "#5a5a5a";
-  if (gid === 102) return "#2e86ab";
-  return "#2d5a27";
+  return terrainGidToCss(gid);
 }
 
 export function useMiniMap() {
@@ -83,29 +79,59 @@ export function useMiniMap() {
     ctx.save();
     ctx.translate(offsetX, offsetY);
 
-    // 1. Dibuja tiles reales de los chunks
+    // 1. Dibuja terreno base + río + árboles (20-70% café) - detecta mismo Terrain que ChunkRenderer
     for (const chunk of chunks.values() as any) {
-      const tiles: number[][] = chunk.tiles ?? [];
-      const baseX = chunk.chunkX * 1024 * scale;
-      const baseY = chunk.chunkY * 1024 * scale;
+      const cx = chunk.chunkX as number;
+      const cy = chunk.chunkY as number;
+      const baseX = cx * 1024 * scale;
+      const baseY = cy * 1024 * scale;
       const tileSize = Math.max(1, Math.ceil(32 * scale));
 
+      // Base por tile: agua > mineral veta > árbol 20-70% > verde
       for (let y = 0; y < 32; y++) {
         for (let x = 0; x < 32; x++) {
-          const gid = tiles[y]?.[x] ?? 1;
-          ctx.fillStyle = gidToColor(gid);
+          const worldTileX = cx * 32 + x;
+          const worldTileY = cy * 32 + y;
+          const mineral = getMineralType(worldTileX, worldTileY);
+          if (isWaterTile(worldTileX, worldTileY)) {
+            ctx.fillStyle = "#023e8a";
+          } else if (mineral) {
+            ctx.fillStyle = getMineralCss(mineral);
+          } else if (isTreeTile(cx, cy, x, y)) {
+            ctx.fillStyle = "#8b4513";
+          } else {
+            ctx.fillStyle = "#3a7d44";
+          }
           const px = baseX + x * 32 * scale;
           const py = baseY + y * 32 * scale;
           ctx.fillRect(px, py, tileSize, tileSize);
         }
       }
+    }
 
-      // Recursos (minerales/madera)
-      for (const r of chunk.resources ?? []) {
-        ctx.fillStyle = "#ffd700";
-        ctx.beginPath();
-        ctx.arc(r.posX * scale, r.posY * scale, 1.5 * Math.min(2, miniZoom), 0, Math.PI * 2);
-        ctx.fill();
+    // Dibuja chunks aún no cargados para minimapa completo (mismo Terrain tile-level)
+    for (let rx = 0; rx < 6; rx++) {
+      for (let ry = 0; ry < 6; ry++) {
+        const key = `${rx}:${ry}`;
+        if (!chunks.has(key)) {
+          const baseX = rx * 1024 * scale;
+          const baseY = ry * 1024 * scale;
+          const tileSize = Math.max(1, Math.ceil(32 * scale));
+          for (let y = 0; y < 32; y++) {
+            for (let x = 0; x < 32; x++) {
+              const worldTileX = rx * 32 + x;
+              const worldTileY = ry * 32 + y;
+              const mineral = getMineralType(worldTileX, worldTileY);
+              if (isWaterTile(worldTileX, worldTileY)) ctx.fillStyle = "#023e8a";
+              else if (mineral) ctx.fillStyle = getMineralCss(mineral);
+              else if (isTreeTile(rx, ry, x, y)) ctx.fillStyle = "#8b4513";
+              else ctx.fillStyle = "#3a7d44";
+              const px = baseX + x * 32 * scale;
+              const py = baseY + y * 32 * scale;
+              ctx.fillRect(px, py, tileSize, tileSize);
+            }
+          }
+        }
       }
     }
 
