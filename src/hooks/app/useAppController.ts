@@ -14,6 +14,8 @@ export function useAppController() {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showBuildings, setShowBuildings] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showMissions, setShowMissions] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const [isAuthed, setIsAuthed] = useState(() => !!localStorage.getItem("access_token"));
 
   const survivors = useGameStore((s) => s.survivors);
@@ -38,6 +40,14 @@ export function useAppController() {
 
   const handleToggleMap = useCallback(() => {
     setShowMap(prev => !prev);
+  }, []);
+
+  const handleToggleMissions = useCallback(() => {
+    setShowMissions(prev => !prev);
+  }, []);
+
+  const handleToggleSkills = useCallback(() => {
+    setShowSkills(prev => !prev);
   }, []);
 
   // Sincronización cross-tab (localStorage / evento auth-changed)
@@ -141,6 +151,8 @@ export function useAppController() {
     window.addEventListener("phaser-action-config", handleToggleSettings);
     window.addEventListener("phaser-action-buildings", handleToggleBuildings);
     window.addEventListener("phaser-action-map", handleToggleMap);
+    window.addEventListener("phaser-action-missions", handleToggleMissions);
+    window.addEventListener("phaser-action-habilidades", handleToggleSkills);
     window.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
@@ -151,27 +163,33 @@ export function useAppController() {
       window.removeEventListener("phaser-action-config", handleToggleSettings);
       window.removeEventListener("phaser-action-buildings", handleToggleBuildings);
       window.removeEventListener("phaser-action-map", handleToggleMap);
+      window.removeEventListener("phaser-action-missions", handleToggleMissions);
+      window.removeEventListener("phaser-action-habilidades", handleToggleSkills);
       window.removeEventListener("wheel", handleWheel);
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
     };
-  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap]);
+  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills]);
 
-  // Atajo de teclado global (Inventario)
+  // Atajo de teclado global (Inventario + Misiones)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isRebindingActive() || isConsoleOpenActive()) return;
       const inventoryKey = getBinding("inventory");
+      const missionsKey = getBinding("missions");
       if (e.key.toUpperCase() === inventoryKey) {
         e.preventDefault();
         handleToggleInventory();
+      } else if (e.key.toUpperCase() === missionsKey) {
+        e.preventDefault();
+        handleToggleMissions();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleToggleInventory]);
+  }, [handleToggleInventory, handleToggleMissions]);
 
   const handleZoomIn = () => {
     setZoom(z => {
@@ -215,6 +233,12 @@ export function useAppController() {
     showMap,
     setShowMap,
     handleToggleMap,
+    showMissions,
+    setShowMissions,
+    handleToggleMissions,
+    showSkills,
+    setShowSkills,
+    handleToggleSkills,
     zoom,
     handleZoomIn,
     handleZoomOut,

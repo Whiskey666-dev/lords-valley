@@ -7,11 +7,15 @@ interface Props {
   onToggleFollowers?: () => void;
   onToggleBuildings?: () => void;
   onToggleMap?: () => void;
+  onToggleMissions?: () => void;
+  onToggleSkills?: () => void;
   isInventoryOpen?: boolean;
   isSettingsOpen?: boolean;
   isFollowersOpen?: boolean;
   isBuildingsOpen?: boolean;
   isMapOpen?: boolean;
+  isMissionsOpen?: boolean;
+  isSkillsOpen?: boolean;
   zoom?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -108,11 +112,15 @@ export function Navbar({
   onToggleFollowers,
   onToggleBuildings,
   onToggleMap,
+  onToggleMissions,
+  onToggleSkills,
   isInventoryOpen = false,
   isSettingsOpen = false,
   isFollowersOpen = false,
   isBuildingsOpen = false,
   isMapOpen = false,
+  isMissionsOpen = false,
+  isSkillsOpen = false,
   zoom = 1,
   onZoomIn,
   onZoomOut,
@@ -123,11 +131,15 @@ export function Navbar({
     onToggleFollowers,
     onToggleBuildings,
     onToggleMap,
+    onToggleMissions,
+    onToggleSkills,
     isInventoryOpen,
     isSettingsOpen,
     isFollowersOpen,
     isBuildingsOpen,
     isMapOpen,
+    isMissionsOpen,
+    isSkillsOpen,
   });
 
   return (
@@ -197,7 +209,7 @@ export function Navbar({
         <HoverBtn
           id="habilidades"
           label="Habilidades"
-          active={true}
+          active={isSkillsOpen}
           activeBg="#1e3a5f"
           activeColor="#8ec5ff"
           activeBorder="#2a5a8a"

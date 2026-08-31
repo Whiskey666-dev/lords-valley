@@ -9,6 +9,8 @@ import { PlayerInventoryPanel } from '../ui/inventory/PlayerInventoryPanel';
 import { MiniMap } from '../ui/hud/MiniMap';
 import { WorldMapPanel } from '../ui/hud/WorldMapPanel';
 import { MineralTooltip } from '../ui/hud/MineralTooltip';
+import { MissionsPanel } from '../ui/missions/MissionsPanel';
+import { SkillsPanel } from '../ui/skills/SkillsPanel';
 import { AuthScreen } from './auth/AuthScreen';
 
 function App() {
@@ -28,6 +30,10 @@ function App() {
     handleToggleBuildings,
     showMap,
     handleToggleMap,
+    showMissions,
+    handleToggleMissions,
+    showSkills,
+    handleToggleSkills,
     zoom,
     handleZoomIn,
     handleZoomOut,
@@ -61,11 +67,15 @@ function App() {
         onToggleFollowers={handleToggleFollowers}
         onToggleBuildings={handleToggleBuildings}
         onToggleMap={handleToggleMap}
+        onToggleMissions={handleToggleMissions}
+        onToggleSkills={handleToggleSkills}
         isInventoryOpen={showPlayerInventory}
         isSettingsOpen={showSettings}
         isFollowersOpen={showFollowers}
         isBuildingsOpen={showBuildings}
         isMapOpen={showMap}
+        isMissionsOpen={showMissions}
+        isSkillsOpen={showSkills}
       />
 
       {/* MiniMap: oculto cuando hay panel lateral o mapa mundial abierto */}
@@ -83,6 +93,12 @@ function App() {
 
       {/* Panel de mapa a pantalla completa */}
       {showMap && <WorldMapPanel onClose={handleToggleMap} />}
+
+      {/* Panel de Misiones — 6 capítulos x 20 misiones */}
+      {showMissions && <MissionsPanel onClose={handleToggleMissions} />}
+
+      {/* Panel de Habilidades — pentagrama 5+1 con anillo de progreso */}
+      {showSkills && <SkillsPanel onClose={handleToggleSkills} />}
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Panel Seguidores - lateral izquierdo */}
