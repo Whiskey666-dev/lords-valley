@@ -118,16 +118,71 @@ export function useConsole() {
       setTimeout(() => setFeedback(null), 2500);
       return;
     }
-    if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | help");
+    // — Comandos Niebla de Guerra —
+    if (lower === "fog toggle" || lower === "niebla toggle") {
+      window.dispatchEvent(new CustomEvent("phaser-fog-toggle" as any, { detail: {} }));
+      setFeedback("🌫️ Niebla alternada");
+      setHistory(h => [...h.slice(-8), "✓ Niebla toggle"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
       return;
     }
-    if (!lower.startsWith("createnpc")) {
+    if (lower === "fog on" || lower === "niebla on") {
+      window.dispatchEvent(new CustomEvent("phaser-fog-toggle" as any, { detail: { enabled: true } }));
+      setFeedback("🌫️ Niebla activada (mapa oscurecido)");
+      setHistory(h => [...h.slice(-8), "✓ Niebla ON"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    if (lower === "fog off" || lower === "niebla off") {
+      window.dispatchEvent(new CustomEvent("phaser-fog-toggle" as any, { detail: { enabled: false } }));
+      setFeedback("☀️ Niebla desactivada (mapa visible)");
+      setHistory(h => [...h.slice(-8), "✓ Niebla OFF"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    if (lower === "fog clear" || lower === "niebla clear") {
+      window.dispatchEvent(new CustomEvent("phaser-fog-clear" as any));
+      setFeedback("🧹 Niebla reiniciada — mapa oscurecido de nuevo");
+      setHistory(h => [...h.slice(-8), "✓ Niebla clear"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    if (lower === "fog reveal" || lower === "niebla reveal" || lower === "fog revealall") {
+      window.dispatchEvent(new CustomEvent("phaser-fog-reveal-all" as any));
+      setFeedback("🔓 Mapa completamente revelado");
+      setHistory(h => [...h.slice(-8), "✓ Mapa revelado"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    const fogRadiusMatch = lower.match(/^fog\s+radius\s+(\d+)$/) || lower.match(/^niebla\s+radius\s+(\d+)$/);
+    if (fogRadiusMatch) {
+      const r = parseInt(fogRadiusMatch[1], 10);
+      if (r >= 32 && r <= 2000) {
+        window.dispatchEvent(new CustomEvent("phaser-fog-radius" as any, { detail: { radius: r } }));
+        setFeedback(`🌫️ Radio de visión ajustado a ${r}px`);
+        setHistory(h => [...h.slice(-8), `✓ Radio ${r}`]);
+      } else {
+        setFeedback("Radio debe estar entre 32 y 2000");
+      }
+      setInput("");
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    if (lower === "help" || lower === "ayuda") {
+      setFeedback("Comandos: createNpc1..10 | fog toggle/on/off/clear/reveal | fog radius <32-2000> | help");
+      return;
+    }
+    if (!lower.startsWith("createnpc") && !lower.startsWith("fog") && !lower.startsWith("niebla")) {
       setFeedback("💬 Para chatear cambia a modo Chat");
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
-    setFeedback(`Comando no reconocido: ${trimmed} (usa createNpc1..10)`);
+    setFeedback(`Comando no reconocido: ${trimmed} (usa createNpc1..10 | fog help)`);
     setTimeout(() => setFeedback(null), 2500);
   };
 

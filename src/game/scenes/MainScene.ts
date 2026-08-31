@@ -15,6 +15,7 @@ import { isBlockedWorldXY, findNearestSafeWorldPos } from "../world/Terrain";
 import { fetchPlayer, savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
+import { FogOfWarSystem } from "../systems/FogOfWarSystem";
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -24,6 +25,7 @@ export class MainScene extends Phaser.Scene {
   private cameraController!: CameraController;
   private mineralPhysics!: MineralPhysicsManager;
   private waterPhysics!: WaterPhysicsManager;
+  private fogOfWar!: FogOfWarSystem;
   private cameraFollow = true;
   private lastViewportEmit = 0;
   private lastCameraX = 0;
@@ -41,6 +43,7 @@ export class MainScene extends Phaser.Scene {
     setupCamera(this, this.player, 6144, 6144);
     this.setupRTSOverlay();
     this.setupMineralPhysics();
+    this.setupFogOfWar();
     this.setupDebug();
   }
 
@@ -200,6 +203,38 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
+  private setupFogOfWar(): void {
+    this.fogOfWar = new FogOfWarSystem(this, 360);
+    this.fogOfWar.create();
+    // Comando de consola para toggle y radio
+    const onFogToggle = (e: Event) => {
+      const detail = (e as CustomEvent<{ enabled?: boolean; radius?: number }>).detail;
+      if (!this.fogOfWar) return;
+      if (typeof detail?.enabled === "boolean") this.fogOfWar.setEnabled(detail.enabled);
+      else this.fogOfWar.setEnabled(!this.fogOfWar.isEnabled());
+    };
+    const onFogRadius = (e: Event) => {
+      const detail = (e as CustomEvent<{ radius: number }>).detail;
+      if (typeof detail?.radius === "number") this.fogOfWar?.setRadius(detail.radius);
+    };
+    window.addEventListener("phaser-fog-toggle" as any, onFogToggle as EventListener);
+    window.addEventListener("phaser-fog-radius" as any, onFogRadius as EventListener);
+    // Exponer API global para debug
+    (window as any).__FOG_API__ = {
+      toggle: () => window.dispatchEvent(new CustomEvent("phaser-fog-toggle" as any, { detail: {} })),
+      setEnabled: (v: boolean) => window.dispatchEvent(new CustomEvent("phaser-fog-toggle" as any, { detail: { enabled: v } })),
+      setRadius: (r: number) => window.dispatchEvent(new CustomEvent("phaser-fog-radius" as any, { detail: { radius: r } })),
+      getRadius: () => this.fogOfWar?.getRadius(),
+      isEnabled: () => this.fogOfWar?.isEnabled(),
+    };
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener("phaser-fog-toggle" as any, onFogToggle as EventListener);
+      window.removeEventListener("phaser-fog-radius" as any, onFogRadius as EventListener);
+      (window as any).__FOG_API__ = undefined;
+      this.fogOfWar?.destroy();
+    });
+  }
+
   private setupDebug(): void {
     if (this.input.keyboard) {
       this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.ESC]);
@@ -297,6 +332,11 @@ export class MainScene extends Phaser.Scene {
       }
       this.npcs.forEach(n => n.updateEntity());
       this.chatSystem.update(this.player);
+      // Mantener niebla actualizada incluso con input bloqueado (consola abierta)
+      if (this.cameraFollow && this.player) updateCamera(this, this.player);
+      if (this.fogOfWar && this.player && this.cameras.main) {
+        this.fogOfWar.update(this.player.x, this.player.y, this.cameras.main);
+      }
       return;
     }
     if (InputSystem.isCloseJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-npc-deselected"));
@@ -324,6 +364,11 @@ export class MainScene extends Phaser.Scene {
     this.chatSystem.update(this.player);
     if (this.cameraFollow && this.player) {
       updateCamera(this, this.player);
+    }
+
+    // Niebla de guerra — actualizar visión circular principal después del movimiento de cámara
+    if (this.fogOfWar && this.player && this.cameras.main) {
+      this.fogOfWar.update(this.player.x, this.player.y, this.cameras.main);
     }
   }
 }

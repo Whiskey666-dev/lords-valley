@@ -12,11 +12,15 @@ export function MiniMap() {
     showAlerts,
     position,
     isVisible,
+    fogEnabled,
+    exploredPercent,
     toggleExpand,
     toggleMissions,
     toggleAlerts,
     togglePosition,
     toggleVisibility,
+    toggleFog,
+    clearFog,
     zoomIn,
     zoomOut,
     handleMiniMapClick,
@@ -152,6 +156,16 @@ export function MiniMap() {
             ⚠️
           </CircleBtn>
 
+          {/* Botón: Niebla de Guerra */}
+          <CircleBtn
+            title={fogEnabled ? `Niebla activada — ${exploredPercent}% explorado. Click para desactivar. Doble-click para limpiar.` : 'Niebla desactivada — Click para activar'}
+            active={fogEnabled}
+            activeColor={fogEnabled ? "#9d7cff" : "#3a3a3a"}
+            onClick={toggleFog}
+          >
+            🌫️
+          </CircleBtn>
+
           {/* Separador vertical */}
           <div style={{ width: 1, height: 18, background: '#1a2a3c', margin: '0 2px', borderRadius: 1 }} />
 
@@ -164,6 +178,18 @@ export function MiniMap() {
           >
             {isTop ? '⬇️' : '⬆️'}
           </CircleBtn>
+
+          {/* Botón: Reset niebla (solo si niebla activa) */}
+          {fogEnabled && (
+            <CircleBtn
+              title="Reiniciar niebla (volver a oscurecer todo)"
+              active={false}
+              activeColor="#7a8e9e"
+              onClick={clearFog}
+            >
+              🧹
+            </CircleBtn>
+          )}
 
           {/* Botón: Ocultar minimapa */}
           <CircleBtn
@@ -262,6 +288,33 @@ export function MiniMap() {
               <div title="Sureste" style={{ position: 'absolute', bottom: 3, right: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>SE</div>
               {/* Suroeste */}
               <div title="Suroeste" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>SO</div>
+
+              {/* Indicador de niebla */}
+              {fogEnabled && (
+                <div
+                  title={`${exploredPercent}% del mundo explorado — La niebla se disipa permanentemente al explorar`}
+                  style={{
+                    position: 'absolute',
+                    bottom: -18,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    fontSize: 7,
+                    fontWeight: 700,
+                    color: '#9d7cff',
+                    background: 'rgba(20,12,36,0.85)',
+                    border: '1px solid rgba(157,124,255,0.35)',
+                    padding: '1px 5px',
+                    borderRadius: 8,
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                    fontFamily: 'monospace',
+                    letterSpacing: 0.3,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  🌫️ {exploredPercent}% explorado
+                </div>
+              )}
             </div>
           </div>
 

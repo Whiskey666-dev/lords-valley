@@ -12,6 +12,7 @@ import { MineralTooltip } from '../ui/hud/MineralTooltip';
 import { MissionsPanel } from '../ui/missions/MissionsPanel';
 import { SkillsPanel } from '../ui/skills/SkillsPanel';
 import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
+import { FogOverlay } from '../ui/hud/FogOverlay';
 import { AuthScreen } from './auth/AuthScreen';
 
 function App() {
@@ -112,17 +113,22 @@ function App() {
         {/* Panel Seguidores - lateral izquierdo */}
         {showFollowers && <FollowersPanel onClose={handleToggleFollowers} />}
 
-        <div
-          id="game-container"
-          style={{
-            flex: 1,
-            height: '100%',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            position: 'relative',
-          }}
-        />
+        {/* Contenedor del juego + niebla DOM que cubre TODO el terreno cargado */}
+        <div style={{ flex: 1, height: '100%', position: 'relative', overflow: 'hidden', display: 'flex' }}>
+          <div
+            id="game-container"
+            style={{
+              flex: 1,
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              position: 'relative',
+            }}
+          />
+          {/* Niebla de guerra DOM — opaca todo excepto círculo alrededor del personaje */}
+          {!showMap && <FogOverlay />}
+        </div>
 
         {/* Panel NPC - lateral derecho */}
         {selectedNPC && (
