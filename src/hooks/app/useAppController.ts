@@ -16,6 +16,7 @@ export function useAppController() {
   const [showMap, setShowMap] = useState(false);
   const [showMissions, setShowMissions] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showConstruction, setShowConstruction] = useState(false);
   const [isAuthed, setIsAuthed] = useState(() => !!localStorage.getItem("access_token"));
 
   const survivors = useGameStore((s) => s.survivors);
@@ -48,6 +49,9 @@ export function useAppController() {
 
   const handleToggleSkills = useCallback(() => {
     setShowSkills(prev => !prev);
+  }, []);
+  const handleToggleConstruction = useCallback(() => {
+    setShowConstruction(prev => !prev);
   }, []);
 
   // Sincronización cross-tab (localStorage / evento auth-changed)
@@ -153,6 +157,7 @@ export function useAppController() {
     window.addEventListener("phaser-action-map", handleToggleMap);
     window.addEventListener("phaser-action-missions", handleToggleMissions);
     window.addEventListener("phaser-action-habilidades", handleToggleSkills);
+    window.addEventListener("phaser-action-construction", handleToggleConstruction);
     window.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
@@ -165,13 +170,14 @@ export function useAppController() {
       window.removeEventListener("phaser-action-map", handleToggleMap);
       window.removeEventListener("phaser-action-missions", handleToggleMissions);
       window.removeEventListener("phaser-action-habilidades", handleToggleSkills);
+      window.removeEventListener("phaser-action-construction", handleToggleConstruction);
       window.removeEventListener("wheel", handleWheel);
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
     };
-  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills]);
+  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills, handleToggleConstruction]);
 
   // Atajo de teclado global (Inventario + Misiones)
   useEffect(() => {
@@ -239,6 +245,9 @@ export function useAppController() {
     showSkills,
     setShowSkills,
     handleToggleSkills,
+    showConstruction,
+    setShowConstruction,
+    handleToggleConstruction,
     zoom,
     handleZoomIn,
     handleZoomOut,

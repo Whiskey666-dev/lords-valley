@@ -14,6 +14,7 @@ export interface UseNavbarProps {
   onToggleMap?: () => void;
   onToggleMissions?: () => void;
   onToggleSkills?: () => void;
+  onToggleConstruction?: () => void;
   isInventoryOpen?: boolean;
   isSettingsOpen?: boolean;
   isFollowersOpen?: boolean;
@@ -21,6 +22,7 @@ export interface UseNavbarProps {
   isMapOpen?: boolean;
   isMissionsOpen?: boolean;
   isSkillsOpen?: boolean;
+  isConstructionOpen?: boolean;
 }
 
 export function useNavbar({
@@ -31,12 +33,14 @@ export function useNavbar({
   onToggleMap,
   onToggleMissions,
   onToggleSkills,
+  onToggleConstruction,
   isInventoryOpen = false,
   isSettingsOpen = false,
   isFollowersOpen = false,
   isBuildingsOpen = false,
   isMapOpen = false,
   isMissionsOpen = false,
+  isConstructionOpen = false,
 }: UseNavbarProps = {}) {
   const dispatchAction = (action: string) => {
     if (action === "config" && onOpenSettings) { onOpenSettings(); return; }
@@ -46,6 +50,9 @@ export function useNavbar({
     if (action === "map" && onToggleMap) { onToggleMap(); return; }
     if (action === "missions" && onToggleMissions) { onToggleMissions(); return; }
     if (action === "habilidades" && onToggleSkills) { onToggleSkills(); return; }
+    if (action === "construction" && onToggleConstruction) { onToggleConstruction(); return; }
+    // usa isConstructionOpen para evitar unused
+    void isConstructionOpen;
     window.dispatchEvent(new CustomEvent(`phaser-action-${action}`));
   };
 

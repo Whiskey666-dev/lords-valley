@@ -11,6 +11,7 @@ import { WorldMapPanel } from '../ui/hud/WorldMapPanel';
 import { MineralTooltip } from '../ui/hud/MineralTooltip';
 import { MissionsPanel } from '../ui/missions/MissionsPanel';
 import { SkillsPanel } from '../ui/skills/SkillsPanel';
+import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
 import { AuthScreen } from './auth/AuthScreen';
 
 function App() {
@@ -34,6 +35,8 @@ function App() {
     handleToggleMissions,
     showSkills,
     handleToggleSkills,
+    showConstruction,
+    handleToggleConstruction,
     zoom,
     handleZoomIn,
     handleZoomOut,
@@ -69,6 +72,7 @@ function App() {
         onToggleMap={handleToggleMap}
         onToggleMissions={handleToggleMissions}
         onToggleSkills={handleToggleSkills}
+        onToggleConstruction={handleToggleConstruction}
         isInventoryOpen={showPlayerInventory}
         isSettingsOpen={showSettings}
         isFollowersOpen={showFollowers}
@@ -76,6 +80,7 @@ function App() {
         isMapOpen={showMap}
         isMissionsOpen={showMissions}
         isSkillsOpen={showSkills}
+        isConstructionOpen={showConstruction}
       />
 
       {/* MiniMap: oculto cuando hay panel lateral o mapa mundial abierto */}
@@ -99,6 +104,9 @@ function App() {
 
       {/* Panel de Habilidades — pentagrama 5+1 con anillo de progreso */}
       {showSkills && <SkillsPanel onClose={handleToggleSkills} />}
+
+      {/* Panel de Construcción — 56 edificios 7 categorías + mejoras por capítulo */}
+      {showConstruction && <ConstructionPanel onClose={handleToggleConstruction} />}
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Panel Seguidores - lateral izquierdo */}
