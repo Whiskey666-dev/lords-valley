@@ -4,6 +4,7 @@ import { BaseHuman } from "./BaseHuman";
 import type { Direction8 } from "./Animations";
 import * as InputSystem from "../game/systems/InputSystem";
 import { isGameInputBlocked } from "../ui/input/KeyBindings";
+import { isBlockedWorldXY } from "../game/world/Terrain";
 
 export class Player extends BaseHuman {
   private isJumping = false;
@@ -41,10 +42,7 @@ export class Player extends BaseHuman {
 
   private executeDash() {
     if (this.isDashing || this.isJumping || CombatSystem.isAttacking(this)) return;
-    this.isDashing = true;
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    this.playDash(this.lastDirection);
-    // Dash +50% distancia vs ajuste anterior: 500 * 0.225 = 112.5 (antes 75)
+    // Evita dash hacia mineral/agua (si destino inmediato bloqueado)
     const dashSpeed = 500;
     const dashDuration = 225; // 150ms *1.5 = 225ms
     const dir = this.lastDirection;
@@ -59,12 +57,59 @@ export class Player extends BaseHuman {
       if (dir === "left") vx = -1;
       if (dir === "right") vx = 1;
     }
-    body.setVelocity(vx * dashSpeed, vy * dashSpeed);
+    const dashDist = dashSpeed * (dashDuration / 1000);
+    const targetX = this.x + vx * dashDist;
+    const targetY = this.y + vy * dashDist;
+    if (this.isBodyBlockedAt(targetX, targetY)) return;
+    this.isDashing = true;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    this.playDash(this.lastDirection);
     this.scene.time.delayedCall(dashDuration, () => {
       this.isDashing = false;
       body.setVelocity(0);
       if (this.active) this.playIdle();
     });
+  }
+
+  private isBodyBlockedAt(worldX: number, worldY: number): boolean {
+    // Hitbox 20x20 offset 14,36 anchored 0.5,0.5 => left=x-10 right=x+10 top=y+4 bottom=y+24
+    // Bloquea minerales y agua (isBlockedWorldXY = mineral || agua)
+    const left = worldX - 10;
+    const right = worldX + 10;
+    const top = worldY + 4;
+    const bottom = worldY + 24;
+    const cx = worldX;
+    const cy = (top + bottom) / 2;
+    // 5 puntos: 4 esquinas + centro del cuerpo
+    return (
+      isBlockedWorldXY(left, top) ||
+      isBlockedWorldXY(right, top) ||
+      isBlockedWorldXY(left, bottom) ||
+      isBlockedWorldXY(right, bottom) ||
+      isBlockedWorldXY(cx, cy) ||
+      isBlockedWorldXY(cx, top) ||
+      isBlockedWorldXY(cx, bottom)
+    );
+  }
+
+  private filterMovementByTerrain(xDir: number, yDir: number): { xDir: number; yDir: number } {
+    if (xDir === 0 && yDir === 0) return { xDir, yDir };
+    // Prueba desplazamiento en X e Y por separado para permitir deslizamiento
+    const testDist = 10; // ~ mitad del hitbox, asegura que probamos el siguiente tile
+    const nextX = this.x + xDir * testDist;
+    const nextY = this.y + yDir * testDist;
+    const blockedX = xDir !== 0 && this.isBodyBlockedAt(nextX, this.y);
+    const blockedY = yDir !== 0 && this.isBodyBlockedAt(this.x, nextY);
+    const blockedDiag = xDir !== 0 && yDir !== 0 && this.isBodyBlockedAt(nextX, nextY);
+    let fx = xDir, fy = yDir;
+    if (blockedDiag && !blockedX && !blockedY) {
+      // diagonal bloqueada pero ejes libres -> mantener ejes (deslizamiento ya natural, no bloquear)
+    }
+    if (blockedX) fx = 0;
+    if (blockedY) fy = 0;
+    // Si ambos ejes bloqueados, queda (0,0)
+    // Si diagonal bloqueada y ambos ejes bloqueados, ya es 0,0
+    return { xDir: fx, yDir: fy };
   }
 
   updateEntity() {
@@ -101,18 +146,38 @@ export class Player extends BaseHuman {
     if (this.isJumping) {
       body.setVelocity(0);
       const jumpSpeed = 184;
-      const { xDir, yDir } = InputSystem.getMovementVector(this.scene);
+      let { xDir, yDir } = InputSystem.getMovementVector(this.scene);
+      ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
       if (xDir !== 0) body.setVelocityX(xDir * jumpSpeed);
       if (yDir !== 0) body.setVelocityY(yDir * jumpSpeed);
       if (body.velocity.x !== 0 && body.velocity.y !== 0) body.velocity.normalize().scale(jumpSpeed);
-      const dir = InputSystem.getDirection(this.scene);
+      const dir = (xDir !== 0 || yDir !== 0) ? (InputSystem.getDirection(this.scene) as Direction8 | "") : "";
       if (dir !== "") this.lastDirection = dir as Direction8;
       return;
     }
 
     body.setVelocity(0);
 
-    const { xDir, yDir, dir } = InputSystem.getMovementVector(this.scene);
+    let { xDir, yDir, dir } = InputSystem.getMovementVector(this.scene);
+    ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
+    // Recalcula dir tras filtrar minerales/agua para animación correcta
+    if (xDir === 0 && yDir === 0) {
+      dir = "";
+    } else if (dir !== "") {
+      // Si el vector original fue bloqueado parcialmente, recalcular dirección física
+      const recalculated = (() => {
+        if (xDir === -1 && yDir === 0) return "left";
+        if (xDir === 1 && yDir === 0) return "right";
+        if (xDir === 0 && yDir === -1) return "up";
+        if (xDir === 0 && yDir === 1) return "down";
+        if (xDir === -1 && yDir === -1) return "up_left";
+        if (xDir === 1 && yDir === -1) return "up_right";
+        if (xDir === -1 && yDir === 1) return "down_left";
+        if (xDir === 1 && yDir === 1) return "down_right";
+        return dir;
+      })();
+      dir = recalculated as typeof dir;
+    }
     if (xDir !== 0) body.setVelocityX(xDir * speed);
     if (yDir !== 0) body.setVelocityY(yDir * speed);
     if (body.velocity.x !== 0 && body.velocity.y !== 0) {

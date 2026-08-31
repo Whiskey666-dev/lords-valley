@@ -296,3 +296,60 @@ export function gidToCss(gid: number): string {
   if (gid === 35) return "#1a1a1a";
   return "#3a7d44";
 }
+
+export const MINERAL_LABELS: Record<string, string> = {
+  CARBON: "Carbón",
+  COBRE: "Cobre",
+  ESTANO: "Estaño",
+  HIERRO: "Hierro",
+  PLATA: "Plata",
+  ORO: "Oro",
+};
+
+export const MINERAL_DESCRIPTIONS: Record<string, string> = {
+  CARBON: "Combustible básico para hornos y forja",
+  COBRE: "Metal blando para herramientas y cableado",
+  ESTANO: "Aleación esencial para bronce",
+  HIERRO: "Metal resistente para armas y estructuras",
+  PLATA: "Metal precioso, comercio y orfebrería",
+  ORO: "Metal muy raro y valioso",
+};
+
+export function getMineralDisplayName(type: string): string {
+  return MINERAL_LABELS[type] ?? type;
+}
+
+export function getMineralDescription(type: string): string {
+  return MINERAL_DESCRIPTIONS[type] ?? "Veta mineral";
+}
+
+export function isBlockedTile(worldTileX: number, worldTileY: number): boolean {
+  return isMineralTile(worldTileX, worldTileY) || isWaterTile(worldTileX, worldTileY);
+}
+
+export function isBlockedWorldXY(worldX: number, worldY: number): boolean {
+  const tx = Math.floor(worldX / TILE);
+  const ty = Math.floor(worldY / TILE);
+  if (tx < 0 || tx >= WORLD_TILES || ty < 0 || ty >= WORLD_TILES) return true;
+  return isBlockedTile(tx, ty);
+}
+
+export function findNearestSafeWorldPos(worldX: number, worldY: number, maxRadiusTiles = 12): { x: number; y: number } | null {
+  const originTx = Math.floor(worldX / TILE);
+  const originTy = Math.floor(worldY / TILE);
+  if (!isBlockedTile(originTx, originTy)) return { x: worldX, y: worldY };
+  for (let r = 1; r <= maxRadiusTiles; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // solo borde del cuadrado
+        const tx = originTx + dx;
+        const ty = originTy + dy;
+        if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) continue;
+        if (!isBlockedTile(tx, ty)) {
+          return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
+        }
+      }
+    }
+  }
+  return null;
+}

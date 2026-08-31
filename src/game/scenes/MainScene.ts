@@ -9,6 +9,9 @@ import { getCenterSpawn, spawnNpcs } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { ChunkRenderer } from "../entities/ChunkRenderer";
 import { CameraController } from "../systems/CameraController";
+import { MineralPhysicsManager } from "../systems/MineralPhysics";
+import { WaterPhysicsManager } from "../systems/WaterPhysics";
+import { isBlockedWorldXY, findNearestSafeWorldPos } from "../world/Terrain";
 import { fetchPlayer, savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
@@ -19,6 +22,8 @@ export class MainScene extends Phaser.Scene {
   private chatSystem!: ChatBubbleSystem;
   private chunkRenderer!: ChunkRenderer;
   private cameraController!: CameraController;
+  private mineralPhysics!: MineralPhysicsManager;
+  private waterPhysics!: WaterPhysicsManager;
   private cameraFollow = true;
   private lastViewportEmit = 0;
   private lastCameraX = 0;
@@ -35,6 +40,7 @@ export class MainScene extends Phaser.Scene {
     this.chatSystem = new ChatBubbleSystem(this);
     setupCamera(this, this.player, 6144, 6144);
     this.setupRTSOverlay();
+    this.setupMineralPhysics();
     this.setupDebug();
   }
 
@@ -94,22 +100,18 @@ export class MainScene extends Phaser.Scene {
     this.player = new Player(this, spawn.x, spawn.y);
     this.player.setOrigin(0.5, 0.5);
     this.player.setDepth(10);
-    // Restaurar última posición guardada en core (Player.settings.lastPos) si existe
-    (async () => {
-      try {
-        const settlement = (useGameStore as any).getState?.().settlement;
-        const playerId = settlement?.ownerId || localStorage.getItem('playerId');
-        if (playerId) {
-          const dto: any = await fetchPlayer(playerId);
-          const lastPos = dto?.settings?.lastPos;
-          if (lastPos && typeof lastPos.x === 'number' && typeof lastPos.y === 'number') {
-            this.player.setPosition(lastPos.x, lastPos.y);
-            this.cameras.main.centerOn(lastPos.x, lastPos.y);
-            console.log('[MainScene] Player restaurado en lastPos core', lastPos);
-          }
+    // Seguridad: si spawn inicial cae en mineral (raro por retry), recolocar a tile seguro cercano
+    try {
+      if (isBlockedWorldXY(this.player.x, this.player.y)) {
+        const safe = findNearestSafeWorldPos(this.player.x, this.player.y);
+        if (safe) {
+          this.player.setPosition(safe.x, safe.y);
+          console.log('[MainScene] Spawn corregido a posición segura', safe);
         }
-      } catch (e) { console.log('[MainScene] no lastPos, usa spawn', spawn); }
-    })();
+      }
+    } catch {}
+    // Spawn siempre exactamente al centro del mapa (3072,3072) - sin aleatoriedad ni restauración de lastPos
+    // Se ignora lastPos guardado para cumplir requisito "siempre al centro"
     this.player.setInteractive({ useHandCursor: true });
     this.player.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
       if ((pointer as any).middleButtonDown?.() || (pointer as any).rightButtonDown?.()) return;
@@ -186,6 +188,18 @@ export class MainScene extends Phaser.Scene {
     window.addEventListener('wheel', (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false } as any);
   }
 
+  private setupMineralPhysics(): void {
+    this.mineralPhysics = new MineralPhysicsManager(this);
+    this.mineralPhysics.init();
+    this.waterPhysics = new WaterPhysicsManager(this);
+    this.waterPhysics.init();
+    // Limpieza al cerrar escena
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.mineralPhysics?.destroy();
+      this.waterPhysics?.destroy();
+    });
+  }
+
   private setupDebug(): void {
     if (this.input.keyboard) {
       this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.ESC]);
@@ -232,6 +246,13 @@ export class MainScene extends Phaser.Scene {
       });
     }
     
+    if (this.mineralPhysics && this.cameras.main) {
+      this.mineralPhysics.sync(this.cameras.main, this.player as unknown as Phaser.Physics.Arcade.Sprite, this.npcs.map(n => ({ sprite: n.sprite as unknown as Phaser.Physics.Arcade.Sprite | null, id: n.id })));
+    }
+    if (this.waterPhysics && this.cameras.main) {
+      this.waterPhysics.sync(this.cameras.main, this.player as unknown as Phaser.Physics.Arcade.Sprite, this.npcs.map(n => ({ sprite: n.sprite as unknown as Phaser.Physics.Arcade.Sprite | null, id: n.id })));
+    }
+
     if (this.chunkRenderer && this.cameras.main) {
       // Restaurado: renderizado de terreno (eliminado por error en d181697)
       this.chunkRenderer.update(this.cameras.main);

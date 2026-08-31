@@ -8,6 +8,7 @@ import { BuildingsPanel } from '../ui/buildings/BuildingsPanel';
 import { PlayerInventoryPanel } from '../ui/inventory/PlayerInventoryPanel';
 import { MiniMap } from '../ui/hud/MiniMap';
 import { WorldMapPanel } from '../ui/hud/WorldMapPanel';
+import { MineralTooltip } from '../ui/hud/MineralTooltip';
 import { AuthScreen } from './auth/AuthScreen';
 
 function App() {
@@ -69,6 +70,9 @@ function App() {
 
       {/* MiniMap: oculto cuando hay panel lateral o mapa mundial abierto */}
       {!hasSidePanel && !showMap && <MiniMap />}
+
+      {/* Tooltip informativo de minerales al hover */}
+      <MineralTooltip />
 
       <Console />
 

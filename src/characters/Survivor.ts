@@ -97,7 +97,9 @@ export class Survivor {
 
     instanciarSprite(scene: Phaser.Scene, x: number, y: number) {
         this.sprite = new SurvivorSprite(scene, x, y);
-        this.sprite.setImmovable(true);
+        // Sin colisión entre personajes/NPCs: permiten atravesarse, pero sí colisionan con minerales/agua.
+        // No immovable para que el sistema de física de terreno (MineralPhysics/WaterPhysics) pueda separar correctamente.
+        this.sprite.setImmovable(false);
 
         this.sprite.setInteractive({ useHandCursor: true });
         this.sprite.setDepth(10);

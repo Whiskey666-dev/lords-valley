@@ -243,13 +243,10 @@ export function useMiniMap() {
     ctx.restore();
   }, [chunks, playerPos, npcsPos, currentSize, miniZoom, showMissions, showAlerts]);
 
-  // Click en minimapa para mover cámara
+  // Click en minimapa cuadrado para mover cámara (esquinas visibles)
   const handleMiniMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const cx = e.clientX - rect.left - currentSize / 2;
-    const cy = e.clientY - rect.top - currentSize / 2;
-    const dist = Math.hypot(cx, cy);
-    if (dist > currentSize / 2) return;
+    // Sin filtro circular: todo el cuadrado es clicable (incluye esquinas)
 
     let worldX: number;
     let worldY: number;

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavbar } from "../../hooks/menu/useNavbar";
 
 interface Props {
@@ -29,9 +30,77 @@ const btnBase: React.CSSProperties = {
   lineHeight: 1.2,
 };
 
+const symbolMap: Record<string, string> = {
+  followers: "👥",
+  buildings: "🏰",
+  construction: "🔨",
+  habilidades: "✨",
+  missions: "📜",
+  inventory: "🎒",
+  map: "🗺️",
+  config: "⚙️",
+};
+
+function HoverBtn({
+  id,
+  label,
+  active,
+  activeBg,
+  activeColor,
+  activeBorder,
+  onClick,
+}: {
+  id: string;
+  label: string;
+  active?: boolean;
+  activeBg?: string;
+  activeColor?: string;
+  activeBorder?: string;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const symbol = symbolMap[id] ?? "•";
+  // Limpia sufijo [J] para mostrar solo nombre en hover, mantiene tooltip completo
+  const cleanLabel = label.replace(/\s*\[.*\]$/, "");
+  const isActive = !!active;
+  return (
+    <button
+      key={id}
+      onClick={(e) => {
+        (e.currentTarget as HTMLButtonElement).blur();
+        onClick();
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={label}
+      aria-label={label}
+      style={{
+        ...btnBase,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: hover ? 4 : 0,
+        background: isActive ? (activeBg ?? "#1e3322") : btnBase.background,
+        color: isActive ? (activeColor ?? "#00ff88") : btnBase.color,
+        borderColor: isActive ? (activeBorder ?? "#2e7d32") : "#2e2e2e",
+        minWidth: hover ? undefined : 28,
+        padding: hover ? "2px 7px" : "2px 6px",
+        transition: "all 0.15s ease",
+        overflow: "hidden",
+      }}
+    >
+      <span style={{ fontSize: 12, lineHeight: 1 }}>{symbol}</span>
+      {hover && (
+        <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>{cleanLabel}</span>
+      )}
+    </button>
+  );
+}
+
 /**
  * Navbar.tsx - UI/Menu - Barra superior delgada y modular.
  * Ubicada en src/ui/menus/ como componente puro de interfaz desacoplado con useNavbar.
+ * Ahora los botones muestran solo símbolo y revelan texto al hover.
  */
 export function Navbar({
   onOpenSettings,
@@ -100,75 +169,56 @@ export function Navbar({
             +
           </button>
         </div>
-        {leftButtons.map(b => {
-          const isActive = b.active;
-          return (
-            <button
-              key={b.id}
-              onClick={(e) => {
-                e.currentTarget.blur();
-                dispatchAction(b.id);
-              }}
-              style={{
-                ...btnBase,
-                background: isActive ? "#1e3322" : btnBase.background,
-                color: isActive ? "#00ff88" : btnBase.color,
-                borderColor: isActive ? "#2e7d32" : btnBase.border ? (btnBase.border as string).split(" ")[2] : "#2e2e2e",
-              }}
-            >
-              {b.label}
-            </button>
-          );
-        })}
+        {leftButtons.map(b => (
+          <HoverBtn
+            key={b.id}
+            id={b.id}
+            label={b.label}
+            active={b.active}
+            activeBg="#1e3322"
+            activeColor="#00ff88"
+            activeBorder="#2e7d32"
+            onClick={() => dispatchAction(b.id)}
+          />
+        ))}
       </div>
 
-      {/* Centro - Construcción destacado */}
-      <div style={{ display: "flex", justifyContent: "center", flex: "0 0 auto" }}>
-        <button
-          onClick={(e) => {
-            e.currentTarget.blur();
-            dispatchAction("construction");
-          }}
-          title="Construcción"
-          style={{
-            background: "#2e7d32",
-            color: "#fff",
-            border: "1px solid #3a9a3e",
-            borderRadius: 6,
-            padding: "3px 14px",
-            fontSize: 11,
-            fontWeight: 800,
-            cursor: "pointer",
-            boxShadow: "0 1px 4px #00000066",
-            letterSpacing: 0.2,
-          }}
-        >
-          Construcción
-        </button>
+      {/* Centro - Construcción y Habilidades (mismo tamaño que demás botones) */}
+      <div style={{ display: "flex", justifyContent: "center", flex: "0 0 auto", gap: 5 }}>
+        <HoverBtn
+          id="construction"
+          label="Construcción"
+          active={true}
+          activeBg="#2e7d32"
+          activeColor="#fff"
+          activeBorder="#3a9a3e"
+          onClick={() => dispatchAction("construction")}
+        />
+        <HoverBtn
+          id="habilidades"
+          label="Habilidades"
+          active={true}
+          activeBg="#1e3a5f"
+          activeColor="#8ec5ff"
+          activeBorder="#2a5a8a"
+          onClick={() => dispatchAction("habilidades")}
+        />
       </div>
 
       {/* Derecha */}
       <div style={{ display: "flex", gap: 5, alignItems: "center", flex: "0 1 auto", justifyContent: "flex-end", minWidth: 0 }}>
-        {rightButtons.map(b => {
-          const isActive = b.active;
-          return (
-            <button
-              key={b.id}
-              onClick={(e) => {
-                e.currentTarget.blur();
-                dispatchAction(b.id);
-              }}
-              style={{
-                ...btnBase,
-                background: isActive ? "#1e2a33" : btnBase.background,
-                color: isActive ? "#8cf" : btnBase.color,
-                borderColor: isActive ? "#2a4a66" : "#333",
-              }}
-            >
-              {b.label}
-            </button>
-          );
-        })}
+        {rightButtons.map(b => (
+          <HoverBtn
+            key={b.id}
+            id={b.id}
+            label={b.label}
+            active={b.active}
+            activeBg="#1e2a33"
+            activeColor="#8cf"
+            activeBorder="#2a4a66"
+            onClick={() => dispatchAction(b.id)}
+          />
+        ))}
       </div>
     </nav>
   );

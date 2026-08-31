@@ -93,15 +93,21 @@ export function MiniMap() {
       {/* Panel flotante de fecha, hora, estación y clima */}
       {isOpen && <WorldInfoPanel worldData={worldData} onClose={close} anchor={isTop ? "top" : "bottom"} />}
 
-      {/* Contenedor flexible principal con botones laterales a la izquierda, minimapa en el centro y barra de zoom a la derecha */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {/* ── Botones de opciones a la izquierda del minimapa ── */}
+      {/* Contenedor principal: barra horizontal arriba/abajo + fila minimapa+zoom */}
+      <div style={{ display: 'flex', flexDirection: isTop ? 'column-reverse' : 'column', alignItems: 'center', gap: 6 }}>
+        {/* ── Barra horizontal de botones (arriba si minimapa abajo, abajo si minimapa arriba) ── */}
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: 'row',
             gap: 5,
             alignItems: 'center',
+            justifyContent: 'center',
+            background: '#0c1520',
+            border: '1px solid #1a2a3c',
+            borderRadius: 14,
+            padding: '3px 6px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
           }}
         >
           {/* Botón: Expandir / Disminuir */}
@@ -113,6 +119,18 @@ export function MiniMap() {
           >
             {isExpanded ? '🗗' : '⛶'}
           </CircleBtn>
+
+          {/* Botón: Fecha / Hora / Clima */}
+          <div data-world-info-panel>
+            <CircleBtn
+              title="Fecha, Hora y Clima del juego"
+              active={isOpen}
+              activeColor="#4a90e2"
+              onClick={toggle}
+            >
+              📅
+            </CircleBtn>
+          </div>
 
           {/* Botón: Misiones */}
           <CircleBtn
@@ -134,8 +152,8 @@ export function MiniMap() {
             ⚠️
           </CircleBtn>
 
-          {/* Separador sutil */}
-          <div style={{ width: 18, height: 1, background: '#1a2a3c', margin: '2px 0', borderRadius: 1 }} />
+          {/* Separador vertical */}
+          <div style={{ width: 1, height: 18, background: '#1a2a3c', margin: '0 2px', borderRadius: 1 }} />
 
           {/* Botón: Cambiar ubicación (superior / inferior derecha) */}
           <CircleBtn
@@ -158,214 +176,182 @@ export function MiniMap() {
           </CircleBtn>
         </div>
 
-        {/* ── Contenedor del minimapa circular central ── */}
-        <div style={{ position: 'relative', width: currentSize, height: currentSize }}>
-          {/* Canvas circular */}
-          <div
-            onClick={handleMiniMapClick}
-            title="Click para centrar cámara"
-            style={{
-              width: currentSize,
-              height: currentSize,
-              borderRadius: '50%',
-              background: '#040b10',
-              border: '2px solid #334455',
-              overflow: 'hidden',
-              position: 'relative',
-              cursor: 'crosshair',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.85), inset 0 0 10px #000',
-              transition: 'width 0.2s ease, height 0.2s ease',
-            }}
-          >
-            <canvas
-              ref={canvasRef}
-              width={currentSize}
-              height={currentSize}
+        {/* ── Fila: minimapa cuadrado + barra vertical de zoom ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* ── Contenedor del minimapa cuadrado (esquinas visibles) ── */}
+          <div style={{ position: 'relative', width: currentSize, height: currentSize }}>
+            {/* Canvas cuadrado */}
+            <div
+              onClick={handleMiniMapClick}
+              title="Click para centrar cámara"
               style={{
                 width: currentSize,
                 height: currentSize,
-                display: 'block',
-              }}
-            />
-
-            {/* Borde interior circular sutil */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                borderRadius: '50%',
-                border: '1px solid rgba(255,255,255,0.08)',
-                pointerEvents: 'none',
-              }}
-            />
-
-            {/* Cruz retícula centro */}
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 8,
-                height: 1,
-                background: 'rgba(255,255,255,0.25)',
-                transform: 'translate(-50%,-50%)',
-                pointerEvents: 'none',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: 1,
-                height: 8,
-                background: 'rgba(255,255,255,0.25)',
-                transform: 'translate(-50%,-50%)',
-                pointerEvents: 'none',
-              }}
-            />
-
-            {/* Indicador de escala / zoom en la parte inferior interior */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 6,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: 'rgba(0,0,0,0.65)',
-                padding: '1px 5px',
-                borderRadius: 4,
-                fontSize: 8,
-                fontFamily: 'monospace',
-                color: '#8ab4ff',
-                pointerEvents: 'none',
-                letterSpacing: 0.5,
+                borderRadius: 8,
+                background: '#040b10',
+                border: '2px solid #334455',
+                overflow: 'hidden',
+                position: 'relative',
+                cursor: 'crosshair',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.85), inset 0 0 10px #000',
+                transition: 'width 0.2s ease, height 0.2s ease',
               }}
             >
-              {miniZoom}x
+              <canvas
+                ref={canvasRef}
+                width={currentSize}
+                height={currentSize}
+                style={{
+                  width: currentSize,
+                  height: currentSize,
+                  display: 'block',
+                }}
+              />
+
+              {/* Borde interior cuadrado sutil */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* Cruz retícula centro */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  width: 8,
+                  height: 1,
+                  background: 'rgba(255,255,255,0.25)',
+                  transform: 'translate(-50%,-50%)',
+                  pointerEvents: 'none',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  width: 1,
+                  height: 8,
+                  background: 'rgba(255,255,255,0.25)',
+                  transform: 'translate(-50%,-50%)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* 8 puntos cardinales en los bordes */}
+              {/* Norte */}
+              <div title="Norte" style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: isExpanded ? 9 : 8, fontWeight: 800, color: '#e0ebff', background: 'rgba(12,22,38,0.72)', border: '1px solid rgba(90,120,160,0.35)', padding: '1px 3px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(0,0,0,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>N</div>
+              {/* Sur */}
+              <div title="Sur" style={{ position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)', fontSize: isExpanded ? 9 : 8, fontWeight: 800, color: '#e0ebff', background: 'rgba(12,22,38,0.72)', border: '1px solid rgba(90,120,160,0.35)', padding: '1px 3px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(0,0,0,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>S</div>
+              {/* Este */}
+              <div title="Este" style={{ position: 'absolute', right: 3, top: '50%', transform: 'translateY(-50%)', fontSize: isExpanded ? 9 : 8, fontWeight: 800, color: '#e0ebff', background: 'rgba(12,22,38,0.72)', border: '1px solid rgba(90,120,160,0.35)', padding: '1px 3px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(0,0,0,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>E</div>
+              {/* Oeste */}
+              <div title="Oeste" style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: isExpanded ? 9 : 8, fontWeight: 800, color: '#e0ebff', background: 'rgba(12,22,38,0.72)', border: '1px solid rgba(90,120,160,0.35)', padding: '1px 3px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.5, textShadow: '0 1px 2px rgba(0,0,0,0.9)', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>O</div>
+              {/* Noreste */}
+              <div title="Noreste" style={{ position: 'absolute', top: 3, right: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>NE</div>
+              {/* Noroeste */}
+              <div title="Noroeste" style={{ position: 'absolute', top: 3, left: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>NO</div>
+              {/* Sureste */}
+              <div title="Sureste" style={{ position: 'absolute', bottom: 3, right: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>SE</div>
+              {/* Suroeste */}
+              <div title="Suroeste" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: isExpanded ? 8 : 7, fontWeight: 800, color: '#c8d8f0', background: 'rgba(12,22,38,0.62)', border: '1px solid rgba(90,120,160,0.28)', padding: '1px 2px', borderRadius: 3, lineHeight: 1, pointerEvents: 'none', fontFamily: 'monospace', letterSpacing: 0.3, textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>SO</div>
             </div>
           </div>
 
-          {/* Botón superior derecho: Información de fecha / hora / clima */}
-          <button
-            data-world-info-panel
-            onClick={(e) => {
-              e.stopPropagation();
-              e.currentTarget.blur();
-              toggle();
-            }}
-            title="Fecha, Hora y Clima del juego"
-            style={{
-              position: 'absolute',
-              top: -2,
-              right: -2,
-              width: 26,
-              height: 26,
-              borderRadius: '50%',
-              background: isOpen ? '#1e2d40' : '#141e28',
-              border: isOpen ? '1.5px solid #4a90e2' : '1.5px solid #2a3c50',
-              color: isOpen ? '#8ab4ff' : '#ccd',
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.7)',
-              zIndex: 30,
-              transition: 'all 0.15s ease',
-              padding: 0,
-            }}
-          >
-            📅
-          </button>
-        </div>
-
-        {/* ── Barra vertical de zoom al lado derecho ── */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            background: '#0c1520',
-            border: '1px solid #1a2a3c',
-            borderRadius: 14,
-            padding: '3px 2px',
-            gap: 3,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
-          }}
-        >
-          {/* Botón + */}
-          <button
-            onClick={zoomIn}
-            title="Aumentar zoom del minimapa"
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: '50%',
-              background: '#162434',
-              border: '1px solid #243850',
-              color: miniZoom >= 4 ? '#445566' : '#8acfff',
-              fontSize: 13,
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: miniZoom >= 4 ? 'default' : 'pointer',
-              padding: 0,
-            }}
-          >
-            +
-          </button>
-
-          {/* Barra indicadora vertical de nivel de zoom */}
+          {/* ── Barra vertical de zoom al lado derecho ── */}
           <div
             style={{
-              width: 6,
-              height: 48,
-              background: '#060d14',
-              borderRadius: 3,
-              position: 'relative',
-              overflow: 'hidden',
-              border: '1px solid #142230',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              background: '#0c1520',
+              border: '1px solid #1a2a3c',
+              borderRadius: 14,
+              padding: '3px 2px',
+              gap: 3,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
             }}
           >
+            {/* Botón + */}
+            <button
+              onClick={zoomIn}
+              title="Aumentar zoom del minimapa"
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: '#162434',
+                border: '1px solid #243850',
+                color: miniZoom >= 4 ? '#445566' : '#8acfff',
+                fontSize: 13,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: miniZoom >= 4 ? 'default' : 'pointer',
+                padding: 0,
+              }}
+            >
+              +
+            </button>
+
+            {/* Barra indicadora vertical de nivel de zoom */}
             <div
               style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: `${((miniZoom - 1) / 3) * 100}%`,
-                minHeight: 4,
-                background: 'linear-gradient(to top, #2e86ab, #00e5ff)',
-                borderRadius: 2,
-                transition: 'height 0.15s ease',
+                width: 6,
+                height: 48,
+                background: '#060d14',
+                borderRadius: 3,
+                position: 'relative',
+                overflow: 'hidden',
+                border: '1px solid #142230',
               }}
-            />
-          </div>
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: `${((miniZoom - 1) / 3) * 100}%`,
+                  minHeight: 4,
+                  background: 'linear-gradient(to top, #2e86ab, #00e5ff)',
+                  borderRadius: 2,
+                  transition: 'height 0.15s ease',
+                }}
+              />
+            </div>
 
-          {/* Botón − */}
-          <button
-            onClick={zoomOut}
-            title="Reducir zoom del minimapa"
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: '50%',
-              background: '#162434',
-              border: '1px solid #243850',
-              color: miniZoom <= 1 ? '#445566' : '#8acfff',
-              fontSize: 13,
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: miniZoom <= 1 ? 'default' : 'pointer',
-              padding: 0,
-            }}
-          >
-            −
-          </button>
+            {/* Botón − */}
+            <button
+              onClick={zoomOut}
+              title="Reducir zoom del minimapa"
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: '#162434',
+                border: '1px solid #243850',
+                color: miniZoom <= 1 ? '#445566' : '#8acfff',
+                fontSize: 13,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: miniZoom <= 1 ? 'default' : 'pointer',
+                padding: 0,
+              }}
+            >
+              −
+            </button>
+          </div>
         </div>
       </div>
     </div>
