@@ -8,7 +8,6 @@ import { type NpcPanelData } from "../character/useNpcPanel";
 export function useAppController() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
-  const [showTutorial, setShowTutorial] = useState(false);
   const [zoom, setZoom] = useState(50);
   const [showPlayerInventory, setShowPlayerInventory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -27,10 +26,6 @@ export function useAppController() {
 
   const handleToggleSettings = useCallback(() => {
     setShowSettings(prev => !prev);
-  }, []);
-
-  const handleToggleTutorial = useCallback(() => {
-    setShowTutorial(prev => !prev);
   }, []);
 
   const handleToggleFollowers = useCallback(() => {
@@ -141,7 +136,6 @@ export function useAppController() {
 
     window.addEventListener("phaser-npc-selected", handleNPCSelect);
     window.addEventListener("phaser-npc-deselected", handleNPCClose);
-    window.addEventListener("phaser-toggle-tutorial", handleToggleTutorial);
     window.addEventListener("phaser-zoom-sync", handleZoomSync);
     window.addEventListener("phaser-action-inventory", handleToggleInventory);
     window.addEventListener("phaser-action-config", handleToggleSettings);
@@ -152,7 +146,6 @@ export function useAppController() {
     return () => {
       window.removeEventListener("phaser-npc-selected", handleNPCSelect);
       window.removeEventListener("phaser-npc-deselected", handleNPCClose);
-      window.removeEventListener("phaser-toggle-tutorial", handleToggleTutorial);
       window.removeEventListener("phaser-zoom-sync", handleZoomSync);
       window.removeEventListener("phaser-action-inventory", handleToggleInventory);
       window.removeEventListener("phaser-action-config", handleToggleSettings);
@@ -164,17 +157,12 @@ export function useAppController() {
         gameRef.current = null;
       }
     };
-  }, [isAuthed, handleToggleTutorial, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap]);
+  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap]);
 
-  // Atajos de teclado globales (Tutorial, Inventario)
+  // Atajo de teclado global (Inventario)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isRebindingActive() || isConsoleOpenActive()) return;
-      const tabKey = getBinding("tutorial");
-      if (e.key.toUpperCase() === tabKey || (tabKey === "TAB" && e.key === "Tab")) {
-        e.preventDefault();
-        handleToggleTutorial();
-      }
       const inventoryKey = getBinding("inventory");
       if (e.key.toUpperCase() === inventoryKey) {
         e.preventDefault();
@@ -183,7 +171,7 @@ export function useAppController() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleToggleTutorial, handleToggleInventory]);
+  }, [handleToggleInventory]);
 
   const handleZoomIn = () => {
     setZoom(z => {
@@ -212,9 +200,6 @@ export function useAppController() {
     selectedNPC,
     setSelectedNPC,
     handleCloseNPC,
-    showTutorial,
-    setShowTutorial,
-    handleToggleTutorial,
     showPlayerInventory,
     setShowPlayerInventory,
     handleToggleInventory,

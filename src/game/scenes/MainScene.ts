@@ -188,7 +188,7 @@ export class MainScene extends Phaser.Scene {
 
   private setupDebug(): void {
     if (this.input.keyboard) {
-      this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.ESC, Phaser.Input.Keyboard.KeyCodes.TAB]);
+      this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.ESC]);
     }
   }
 

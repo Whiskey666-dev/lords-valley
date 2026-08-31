@@ -1,5 +1,4 @@
 import { useAppController } from '../hooks/app/useAppController';
-import { TutorialPanel } from '../ui/menus/TutorialPanel';
 import { Navbar } from '../ui/menus/Navbar';
 import { Console } from '../ui/menus/Console';
 import { SettingsPanel } from '../ui/menus/SettingsPanel';
@@ -17,8 +16,6 @@ function App() {
     setIsAuthed,
     selectedNPC,
     handleCloseNPC,
-    showTutorial,
-    setShowTutorial,
     showPlayerInventory,
     handleToggleInventory,
     showSettings,
@@ -73,7 +70,6 @@ function App() {
       {/* MiniMap: oculto cuando hay panel lateral o mapa mundial abierto */}
       {!hasSidePanel && !showMap && <MiniMap />}
 
-      <TutorialPanel show={showTutorial} onClose={() => setShowTutorial(false)} />
       <Console />
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}

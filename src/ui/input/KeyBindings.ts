@@ -20,7 +20,6 @@ export type GameAction =
   | "map"
   | "missions"
   | "stats"
-  | "tutorial"
   | "interact"
   | "close"
   | "cameraFollow";
@@ -45,7 +44,6 @@ export const BINDING_INFOS: Record<GameAction, BindingInfo> = {
   map:       { label: "Mapa",              category: "Sistema",    defaultKey: "M",     description: "Abrir mapa (placeholder)" },
   missions: { label: "Misiones",          category: "Sistema",    defaultKey: "J",     description: "Abrir misiones (placeholder)" },
   stats:     { label: "Estadísticas",      category: "Sistema",    defaultKey: "P",     description: "Abrir stats (placeholder)" },
-  tutorial: { label: "Tutorial",          category: "Sistema",    defaultKey: "TAB",   description: "Mostrar/ocultar tutorial" },
   interact: { label: "Interactuar",       category: "Acción",     defaultKey: "LEFT_CLICK", description: "Click izq entorno/NPC" },
   close:     { label: "Cerrar / Deseleccionar", category: "Sistema", defaultKey: "ESC", description: "Cerrar paneles" },
   cameraFollow: { label: "Cámara Seguir",  category: "Sistema",    defaultKey: "Y",     description: "Alternar seguir personaje / libre mouse" },

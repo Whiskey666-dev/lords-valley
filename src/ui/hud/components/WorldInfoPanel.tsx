@@ -17,15 +17,19 @@ interface WorldData {
 interface Props {
   worldData: WorldData;
   onClose: () => void;
+  anchor?: "top" | "bottom";
 }
 
-export function WorldInfoPanel({ worldData, onClose }: Props) {
+export function WorldInfoPanel({ worldData, onClose, anchor = "bottom" }: Props) {
+  const isTop = anchor === "top";
   return (
     <div
       data-world-info-panel
       style={{
         position: 'absolute',
-        bottom: 'calc(100% + 8px)',
+        ...(isTop
+          ? { top: 'calc(100% + 8px)', bottom: 'auto' as const }
+          : { bottom: 'calc(100% + 8px)', top: 'auto' as const }),
         right: 0,
         width: 220,
         backgroundColor: '#151515f2',

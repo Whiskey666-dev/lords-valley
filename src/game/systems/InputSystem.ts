@@ -47,10 +47,6 @@ export function isAttackJustPressed(scene: Phaser.Scene): boolean {
   return isActionJustDown(scene, "attack") || isActionJustDown(scene, "attackAlt");
 }
 
-export function isTutorialJustPressed(scene: Phaser.Scene): boolean {
-  return isActionJustDown(scene, "tutorial");
-}
-
 export function isCloseJustPressed(scene: Phaser.Scene): boolean {
   return isActionJustDown(scene, "close");
 }

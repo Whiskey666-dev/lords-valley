@@ -10,9 +10,13 @@ export function MiniMap() {
     miniZoom,
     showMissions,
     showAlerts,
+    position,
+    isVisible,
     toggleExpand,
     toggleMissions,
     toggleAlerts,
+    togglePosition,
+    toggleVisibility,
     zoomIn,
     zoomOut,
     handleMiniMapClick,
@@ -20,21 +24,74 @@ export function MiniMap() {
 
   const { isOpen, toggle, close, worldData } = useWorldInfo();
 
+  const isTop = position === "top-right";
+
+  // — Minimapa oculto: mostrar solo botón flotante para restaurarlo —
+  if (!isVisible) {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          ...(isTop ? { top: 44, bottom: 'auto' } : { bottom: 12, top: 'auto' }),
+          right: 12,
+          zIndex: 25,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <button
+          onClick={toggleVisibility}
+          title="Mostrar minimapa"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: '#0e1622',
+            border: '1.5px solid #1e2c3e',
+            color: '#7a8e9e',
+            fontSize: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#142436';
+            e.currentTarget.style.borderColor = '#4a90e2';
+            e.currentTarget.style.color = '#8ab4ff';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#0e1622';
+            e.currentTarget.style.borderColor = '#1e2c3e';
+            e.currentTarget.style.color = '#7a8e9e';
+          }}
+        >
+          👁️
+        </button>
+        <span style={{ fontSize: 10, color: '#445566', background: 'rgba(0,0,0,0.55)', padding: '2px 6px', borderRadius: 4 }}>Minimapa oculto</span>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
         position: 'absolute',
-        bottom: 12,
+        ...(isTop ? { top: 44, bottom: 'auto' } : { bottom: 12, top: 'auto' }),
         right: 12,
         zIndex: 25,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         userSelect: 'none',
+        transition: 'top 0.25s ease, bottom 0.25s ease',
       }}
     >
       {/* Panel flotante de fecha, hora, estación y clima */}
-      {isOpen && <WorldInfoPanel worldData={worldData} onClose={close} />}
+      {isOpen && <WorldInfoPanel worldData={worldData} onClose={close} anchor={isTop ? "top" : "bottom"} />}
 
       {/* Contenedor flexible principal con botones laterales a la izquierda, minimapa en el centro y barra de zoom a la derecha */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -75,6 +132,29 @@ export function MiniMap() {
             onClick={toggleAlerts}
           >
             ⚠️
+          </CircleBtn>
+
+          {/* Separador sutil */}
+          <div style={{ width: 18, height: 1, background: '#1a2a3c', margin: '2px 0', borderRadius: 1 }} />
+
+          {/* Botón: Cambiar ubicación (superior / inferior derecha) */}
+          <CircleBtn
+            title={isTop ? 'Mover minimapa a inferior derecha' : 'Mover minimapa a superior derecha'}
+            active={isTop}
+            activeColor="#ffa500"
+            onClick={togglePosition}
+          >
+            {isTop ? '⬇️' : '⬆️'}
+          </CircleBtn>
+
+          {/* Botón: Ocultar minimapa */}
+          <CircleBtn
+            title="Ocultar minimapa"
+            active={false}
+            activeColor="#7a8e9e"
+            onClick={toggleVisibility}
+          >
+            👁️
           </CircleBtn>
         </div>
 

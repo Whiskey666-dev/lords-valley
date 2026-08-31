@@ -3,9 +3,8 @@ import { useKeybindsEditor } from "../../hooks/menu/useKeybindsEditor";
 
 /**
  * KeybindsEditor.tsx - UI/Menu - Editor de teclas reutilizable.
- * Extraído de TutorialPanel para usarlo tanto en el tutorial como en la categoría
- * "Teclado" del panel de Configuración. Contiene la lista de bindings y los botones
- * Guardar/Cancelar/Reset con el mismo comportamiento que antes.
+ * Usado en la categoría "Teclado" del panel de Configuración.
+ * Contiene la lista de bindings y los botones Guardar/Cancelar/Reset.
  */
 export function KeybindsEditor() {
   const { bindings, pending, editing, setEditing, hasChanges, handleSave, handleCancel, handleReset } = useKeybindsEditor();

@@ -6,6 +6,10 @@ export const WORLD_SIZE = 6144;
 export const DEFAULT_MINI_SIZE = 145;
 export const EXPANDED_MINI_SIZE = 240;
 
+export type MiniMapPosition = "top-right" | "bottom-right";
+const STORAGE_POS_KEY = "lordsvalley_minimap_position";
+const STORAGE_VISIBLE_KEY = "lordsvalley_minimap_visible";
+
 export function gidToColor(gid: number): string {
   return terrainGidToCss(gid);
 }
@@ -20,11 +24,39 @@ export function useMiniMap() {
   const [showMissions, setShowMissions] = useState(true);
   const [showAlerts, setShowAlerts] = useState(true);
 
+  // Posición y visibilidad (persistentes)
+  const [position, setPosition] = useState<MiniMapPosition>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(STORAGE_POS_KEY) as MiniMapPosition | null;
+        if (stored === "top-right" || stored === "bottom-right") return stored;
+      }
+    } catch {}
+    return "bottom-right";
+  });
+  const [isVisible, setIsVisible] = useState<boolean>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(STORAGE_VISIBLE_KEY);
+        if (stored !== null) return stored !== "false";
+      }
+    } catch {}
+    return true;
+  });
+
   // Posiciones dinámicas
   const [playerPos, setPlayerPos] = useState<{ x: number; y: number } | null>(null);
   const [npcsPos, setNpcsPos] = useState<Array<{ id: string; x: number; y: number; name?: string }>>([]);
 
   const currentSize = isExpanded ? EXPANDED_MINI_SIZE : DEFAULT_MINI_SIZE;
+
+  // Persistencia de posición y visibilidad
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_POS_KEY, position); } catch {}
+  }, [position]);
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_VISIBLE_KEY, String(isVisible)); } catch {}
+  }, [isVisible]);
 
   // Polling de la posición del jugador y de los NPCs desde Phaser
   useEffect(() => {
@@ -270,6 +302,14 @@ export function useMiniMap() {
     setShowAlerts((prev) => !prev);
   }, []);
 
+  const togglePosition = useCallback(() => {
+    setPosition((prev) => (prev === "bottom-right" ? "top-right" : "bottom-right"));
+  }, []);
+
+  const toggleVisibility = useCallback(() => {
+    setIsVisible((prev) => !prev);
+  }, []);
+
   return {
     canvasRef,
     currentSize,
@@ -277,9 +317,15 @@ export function useMiniMap() {
     miniZoom,
     showMissions,
     showAlerts,
+    position,
+    isVisible,
     toggleExpand,
     toggleMissions,
     toggleAlerts,
+    togglePosition,
+    toggleVisibility,
+    setPosition,
+    setIsVisible,
     zoomIn,
     zoomOut,
     setMiniZoom,
