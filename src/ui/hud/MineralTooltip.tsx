@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getMineralType, getMineralCss, getMineralDisplayName, getMineralDescription, WORLD_TILES } from "../../game/world/Terrain";
+import { getMineralType, getMineralCss, getMineralDisplayName, getMineralDescription, WORLD_TILES, TILE } from "../../game/world/Terrain";
 
 interface TooltipData {
   screenX: number;
@@ -25,9 +25,32 @@ export function MineralTooltip() {
         return;
       }
       try {
-        const worldPoint = cam.getWorldPoint(clientX, clientY);
-        const tx = Math.floor(worldPoint.x / 32);
-        const ty = Math.floor(worldPoint.y / 32);
+        // Convertir coords ventana -> coords canvas (corrige offset Navbar/side panels)
+        // Antes se pasaba clientX/Y directo a getWorldPoint, lo que desplazaba la detección "arriba" del cuadro.
+        const canvas = document.querySelector("#game-container canvas") as HTMLCanvasElement | null;
+        let canvasX: number;
+        let canvasY: number;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+            setData(null);
+            return;
+          }
+          canvasX = clientX - rect.left;
+          canvasY = clientY - rect.top;
+          // Si el tamaño del juego difiere del rect (paneles laterales, DPR), escalar
+          const scaleX = (cam.width || rect.width) / rect.width;
+          const scaleY = (cam.height || rect.height) / rect.height;
+          if (Math.abs(scaleX - 1) > 0.02) canvasX *= scaleX;
+          if (Math.abs(scaleY - 1) > 0.02) canvasY *= scaleY;
+        } else {
+          // Fallback: usa coords directas
+          canvasX = clientX;
+          canvasY = clientY;
+        }
+        const worldPoint = cam.getWorldPoint(canvasX, canvasY);
+        const tx = Math.floor(worldPoint.x / TILE);
+        const ty = Math.floor(worldPoint.y / TILE);
         if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) {
           setData(null);
           return;
