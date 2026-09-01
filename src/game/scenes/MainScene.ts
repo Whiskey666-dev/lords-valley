@@ -36,6 +36,9 @@ export class MainScene extends Phaser.Scene {
 
   create(): void {
     this.setupWorld();
+    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+      detail: { progress: 65, step: "Generando animaciones y entidades..." }
+    }));
     initAllCharacterAnimations(this);
     this.verifyHumanAnimations();
 
@@ -43,6 +46,10 @@ export class MainScene extends Phaser.Scene {
     this.staticGround = new StaticGroundLayer(this);
     this.staticGround.bake();
     this.chunkRenderer = new ChunkRenderer(this);
+
+    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+      detail: { progress: 80, step: "Generando terreno isométrico y colisiones..." }
+    }));
 
     // Capa dinámica para entidades
     this.dynamicLayer = new DynamicLayer(this);
@@ -58,6 +65,10 @@ export class MainScene extends Phaser.Scene {
 
     // Render inicial de chunks alrededor de la cámara
     this.chunkRenderer.update(this.cameras.main);
+
+    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+      detail: { progress: 100, step: "¡Bienvenido a Lords Valley!" }
+    }));
   }
 
   private setupNpcListeners(): void {

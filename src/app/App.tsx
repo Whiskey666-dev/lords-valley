@@ -14,6 +14,7 @@ import { MissionsPanel } from '../ui/missions/MissionsPanel';
 import { SkillsPanel } from '../ui/skills/SkillsPanel';
 import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
 import { FogOverlay } from '../ui/hud/FogOverlay';
+import { LoadingScreen } from '../ui/loading/LoadingScreen';
 import { AuthScreen } from './auth/AuthScreen';
 
 function App() {
@@ -65,6 +66,9 @@ function App() {
       overflow: 'hidden',
       position: 'relative',
     }}>
+      {/* Pantalla de Carga Funcional en Tiempo Real */}
+      <LoadingScreen />
+
       <Navbar
         zoom={zoom}
         onZoomIn={handleZoomIn}

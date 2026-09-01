@@ -50,9 +50,26 @@ export class Preloader extends Phaser.Scene {
   }
 
   preload() {
-    // Documentación oficial: frame dimensions.png = 48 x 64 px (384x64 = 8 frames de 48x64 por tira)
     const FRAME_W = 48;
     const FRAME_H = 64;
+
+    // Escuchar progreso real de carga de archivos en Phaser (0% a 50%)
+    this.load.on("progress", (value: number) => {
+      const pct = Math.round(15 + value * 35);
+      window.dispatchEvent(
+        new CustomEvent("lords-loading-progress", {
+          detail: { progress: pct, step: "Cargando sprites y texturas..." },
+        })
+      );
+    });
+
+    this.load.on("complete", () => {
+      window.dispatchEvent(
+        new CustomEvent("lords-loading-progress", {
+          detail: { progress: 55, step: "Inicializando animaciones y recursos..." },
+        })
+      );
+    });
 
     // Walk
     this.load.spritesheet("player_walk_down", walkDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
@@ -70,7 +87,7 @@ export class Preloader extends Phaser.Scene {
     this.load.spritesheet("player_idle_left_down", idleLeftDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_idle_left_up", idleLeftUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
 
-    // Dash (para ataque / esquive)
+    // Dash
     this.load.spritesheet("player_dash_down", dashDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_dash_up", dashUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_dash_right_down", dashRightDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
@@ -86,7 +103,7 @@ export class Preloader extends Phaser.Scene {
     this.load.spritesheet("player_death_left_down", deathLeftDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_death_left_up", deathLeftUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
 
-    // Jump (48x64, 8 frames)
+    // Jump
     this.load.spritesheet("player_jump_down", jumpDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_jump_up", jumpUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_jump_right_down", jumpRightDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
@@ -94,17 +111,15 @@ export class Preloader extends Phaser.Scene {
     this.load.spritesheet("player_jump_left_down", jumpLeftDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_jump_left_up", jumpLeftUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
 
-    // Dead Dragon — 200x200 8 frames (1600x200 sheet) — idle y walk separados
+    // Dead Dragon
     this.load.spritesheet("dead_dragon_idle_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet("dead_dragon_walk_sheet", deadDragonWalk, { frameWidth: 200, frameHeight: 200 });
-    // Compat: alias antiguo si código espera dead_dragon_sheet (apunta a idle)
     this.load.spritesheet("dead_dragon_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
-
-    // Texto de carga
-    this.add.text(16, 16, "Cargando Lords Valley...", { color: "#ffffff" });
   }
 
   create() {
     this.scene.start("MainScene");
   }
 }
+
+export default Preloader;
