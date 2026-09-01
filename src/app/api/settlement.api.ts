@@ -39,7 +39,14 @@ export async function patchPriorities(id: string, priorities: { foodPriority: nu
   return data;
 }
 
-export async function fetchChunk(x: number, y: number) {
-  const { data } = await api.get(`/map/chunks`, { params: { x, y } });
+export async function fetchChunk(x: number, y: number, signal?: AbortSignal) {
+  const { data } = await api.get(`/map/chunks`, { params: { x, y }, signal, timeout: 5000 });
+  return data;
+}
+
+export async function fetchChunksBulk(chunks: { x: number; y: number }[]) {
+  if (chunks.length === 0) return [];
+  if (chunks.length === 1) return [await fetchChunk(chunks[0].x, chunks[0].y)];
+  const { data } = await api.post(`/map/chunks/generate`, { chunks: chunks.map(c => ({ chunkX: c.x, chunkY: c.y })) }, { timeout: 12000 });
   return data;
 }

@@ -9,6 +9,37 @@ export const TREE_BROWN = 0x8b4513;
 export const WATER_DARK = 0x023e8a;
 export const MINERAL_YELLOW = 0xffd700;
 
+// Isométrico puro 2:1 - cada tile cuadrado es rombo 64x32
+export const ISO_TILE_W = 64;
+export const ISO_TILE_H = 32;
+export const ISO_ORIGIN_X = (WORLD_TILES * ISO_TILE_W) / 2; // 6144
+export const ISO_WORLD_WIDTH = WORLD_TILES * ISO_TILE_W; // 12288
+export const ISO_WORLD_HEIGHT = WORLD_TILES * ISO_TILE_H; // 6144
+
+export function tileToIso(tileX: number, tileY: number) {
+  return {
+    x: (tileX - tileY) * (ISO_TILE_W / 2) + ISO_ORIGIN_X,
+    y: (tileX + tileY) * (ISO_TILE_H / 2)
+  };
+}
+export function isoToTile(isoX: number, isoY: number) {
+  const u = (isoX - ISO_ORIGIN_X - (ISO_TILE_W / 2)) / (ISO_TILE_W / 2);
+  const v = isoY / (ISO_TILE_H / 2);
+  const tileX = Math.floor((u + v) / 2);
+  const tileY = Math.floor((v - u) / 2);
+  return { tileX, tileY };
+}
+export function worldToIso(worldX: number, worldY: number) {
+  // worldX/Y en coords cuadradas 0..6144 -> iso
+  const tx = worldX / TILE;
+  const ty = worldY / TILE;
+  return tileToIso(tx, ty);
+}
+export function isoToWorld(isoX: number, isoY: number) {
+  const t = isoToTile(isoX, isoY);
+  return { x: t.tileX * TILE + TILE/2, y: t.tileY * TILE + TILE/2 };
+}
+
 export function noise(cx: number, cy: number, x: number, y: number, seed = 1337): number {
   const s = Math.sin(cx * 374761 + cy * 668265261 + x * 1274126177 + y * 15485863 + seed * 961748941) * 10000;
   return s - Math.floor(s);
@@ -17,6 +48,7 @@ export function noise(cx: number, cy: number, x: number, y: number, seed = 1337)
 // --- Agua a nivel de TILE pequeño (32px, tamaño personaje) ---
 // Ancho río 5-15 tiles, serpenteante, contiguo, a veces lago o sin agua
 let cachedWaterTiles: Set<string> | null = null;
+let cachedWaterLinear: Set<number> | null = null;
 let cachedWaterType: 'none' | 'river' | 'lake' = 'river';
 
 function generateWaterTiles(): Set<string> {
@@ -130,6 +162,24 @@ export function getWaterTiles(): Set<string> {
   return generateWaterTiles();
 }
 
+export function getWaterLinear(): Set<number> {
+  if (cachedWaterLinear) return cachedWaterLinear;
+  const set = generateWaterTiles();
+  const linear = new Set<number>();
+  for (const k of set) {
+    const sep = k.indexOf(':');
+    const x = parseInt(k.slice(0, sep), 10);
+    const y = parseInt(k.slice(sep + 1), 10);
+    linear.add(y * WORLD_TILES + x);
+  }
+  cachedWaterLinear = linear;
+  return linear;
+}
+
+export function isWaterTileFast(worldTileX: number, worldTileY: number): boolean {
+  return getWaterLinear().has(worldTileY * WORLD_TILES + worldTileX);
+}
+
 export function getWaterType(): 'none' | 'river' | 'lake' {
   generateWaterTiles();
   return cachedWaterType;
@@ -171,8 +221,8 @@ export function getTreeDensity(chunkX: number, chunkY: number): number {
 export function isTreeTile(chunkX: number, chunkY: number, localX: number, localY: number): boolean {
   const worldX = chunkX * CHUNK_TILES + localX;
   const worldY = chunkY * CHUNK_TILES + localY;
-  if (isWaterTile(worldX, worldY)) return false;
-  if (isMineralTile(worldX, worldY)) return false;
+  if (isWaterTileFast(worldX, worldY)) return false;
+  if (isMineralTileFast(worldX, worldY)) return false;
   const density = getTreeDensity(chunkX, chunkY);
   return noise(chunkX, chunkY, localX, localY) < density;
 }
@@ -188,6 +238,7 @@ export const MINERAL_CONFIGS = [
 ];
 
 let cachedMineralTiles: Map<string, string> | null = null;
+let cachedMineralLinear: Map<number, string> | null = null;
 
 function generateMineralTiles(): Map<string, string> {
   if (cachedMineralTiles) return cachedMineralTiles;
@@ -251,12 +302,34 @@ export function getMineralTiles(): Map<string, string> {
   return generateMineralTiles();
 }
 
+export function getMineralLinear(): Map<number, string> {
+  if (cachedMineralLinear) return cachedMineralLinear;
+  const map = generateMineralTiles();
+  const linear = new Map<number, string>();
+  for (const [k, v] of map) {
+    const sep = k.indexOf(':');
+    const x = parseInt(k.slice(0, sep), 10);
+    const y = parseInt(k.slice(sep + 1), 10);
+    linear.set(y * WORLD_TILES + x, v);
+  }
+  cachedMineralLinear = linear;
+  return linear;
+}
+
 export function getMineralType(worldTileX: number, worldTileY: number): string | null {
   return getMineralTiles().get(`${worldTileX}:${worldTileY}`) ?? null;
 }
 
+export function getMineralTypeFast(worldTileX: number, worldTileY: number): string | null {
+  return getMineralLinear().get(worldTileY * WORLD_TILES + worldTileX) ?? null;
+}
+
 export function isMineralTile(worldTileX: number, worldTileY: number): boolean {
   return getMineralTiles().has(`${worldTileX}:${worldTileY}`);
+}
+
+export function isMineralTileFast(worldTileX: number, worldTileY: number): boolean {
+  return getMineralLinear().has(worldTileY * WORLD_TILES + worldTileX);
 }
 
 export function getMineralColor(type: string): number {
@@ -332,6 +405,30 @@ export function isBlockedWorldXY(worldX: number, worldY: number): boolean {
   const ty = Math.floor(worldY / TILE);
   if (tx < 0 || tx >= WORLD_TILES || ty < 0 || ty >= WORLD_TILES) return true;
   return isBlockedTile(tx, ty);
+}
+export function isBlockedIsoWorldXY(isoX: number, isoY: number): boolean {
+  const { tileX, tileY } = isoToTile(isoX, isoY);
+  if (tileX < 0 || tileX >= WORLD_TILES || tileY < 0 || tileY >= WORLD_TILES) return true;
+  return isBlockedTile(tileX, tileY);
+}
+export function findNearestSafeIsoPos(isoX: number, isoY: number, maxRadiusTiles = 12): { x: number; y: number } | null {
+  const { tileX, tileY } = isoToTile(isoX, isoY);
+  if (!isBlockedTile(tileX, tileY)) return { x: isoX, y: isoY };
+  for (let r = 1; r <= maxRadiusTiles; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const tx = tileX + dx, ty = tileY + dy;
+        if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) continue;
+        if (!isBlockedTile(tx, ty)) {
+          const p = tileToIso(tx, ty);
+          // centro del rombo (Bottom-Center + ajuste)
+          return { x: p.x + ISO_TILE_W/2, y: p.y + ISO_TILE_H/2 };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 export function findNearestSafeWorldPos(worldX: number, worldY: number, maxRadiusTiles = 12): { x: number; y: number } | null {

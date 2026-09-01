@@ -69,8 +69,19 @@ export function useConsole() {
         setHistory(h => [...h.slice(-8), `→ ${detail.count} NPCs en centro (total ${detail.total})`]);
       }
     };
+    const onDragonSpawned = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number; total: number; isAlly: boolean }>).detail;
+      if (detail) {
+        const fac = detail.isAlly ? "aliados" : "enemigos";
+        setHistory(h => [...h.slice(-8), `→ ${detail.count} Dead Dragon ${fac} (total ${detail.total})`]);
+      }
+    };
     window.addEventListener("phaser-npcs-spawned", onSpawned as EventListener);
-    return () => window.removeEventListener("phaser-npcs-spawned", onSpawned as EventListener);
+    window.addEventListener("phaser-dead-dragons-spawned" as any, onDragonSpawned as EventListener);
+    return () => {
+      window.removeEventListener("phaser-npcs-spawned", onSpawned as EventListener);
+      window.removeEventListener("phaser-dead-dragons-spawned" as any, onDragonSpawned as EventListener);
+    };
   }, []);
 
   const closeConsole = () => {
@@ -93,7 +104,8 @@ export function useConsole() {
     setHistory(h => [...h.slice(-8), `> ${trimmed}`]);
 
     if (mode === "chat") {
-      if (trimmed.toLowerCase().startsWith("createnpc")) {
+      const l = trimmed.toLowerCase();
+      if (l.startsWith("createnpc") || l.startsWith("createdeaddragon")) {
         setFeedback("⚠️ Estás en modo Chat. Cambia a Consola para usar comandos.");
         setTimeout(() => setFeedback(null), 2500);
         return;
@@ -114,6 +126,19 @@ export function useConsole() {
       window.dispatchEvent(new CustomEvent("phaser-create-npcs", { detail: { count } }));
       setFeedback(`Creando ${count} NPC(s) con habilidades/personalidad/rasgos/gustos aleatorios...`);
       setHistory(h => [...h.slice(-8), `✓ ${count} NPCs creados`]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
+    // — Comandos Dead Dragon: createDeadDragonA1..5 (Aliado) / createDeadDragonE1..5 (Enemigo)
+    const ddMatch = lower.match(/^createdeaddragon\s*([ae])\s*([1-5])$/);
+    if (ddMatch) {
+      const isAlly = ddMatch[1] === "a";
+      const count = parseInt(ddMatch[2], 10);
+      window.dispatchEvent(new CustomEvent("phaser-create-dead-dragons" as any, { detail: { count, isAlly } }));
+      const fac = isAlly ? "aliados" : "enemigos";
+      setFeedback(`Creando ${count} Dead Dragon ${fac}...`);
+      setHistory(h => [...h.slice(-8), `✓ ${count} Dead Dragon ${fac}`]);
       setInput("");
       setTimeout(() => setFeedback(null), 2500);
       return;
@@ -174,15 +199,15 @@ export function useConsole() {
       return;
     }
     if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | fog toggle/on/off/clear/reveal | fog radius <32-2000> | help");
+      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | fog toggle/on/off/clear/reveal | fog radius <32-2000> | help");
       return;
     }
-    if (!lower.startsWith("createnpc") && !lower.startsWith("fog") && !lower.startsWith("niebla")) {
+    if (!lower.startsWith("createnpc") && !lower.startsWith("createdeaddragon") && !lower.startsWith("fog") && !lower.startsWith("niebla")) {
       setFeedback("💬 Para chatear cambia a modo Chat");
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
-    setFeedback(`Comando no reconocido: ${trimmed} (usa createNpc1..10 | fog help)`);
+    setFeedback(`Comando no reconocido: ${trimmed} (usa createNpc1..10 | createDeadDragonA/E1..5 | fog help)`);
     setTimeout(() => setFeedback(null), 2500);
   };
 

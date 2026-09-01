@@ -4,6 +4,7 @@ import { Console } from '../ui/menus/Console';
 import { SettingsPanel } from '../ui/menus/SettingsPanel';
 import { NpcPanel } from '../ui/character/NpcPanel';
 import { FollowersPanel } from '../ui/character/FollowersPanel';
+import { DeadDragonPanel } from '../ui/character/DeadDragonPanel';
 import { BuildingsPanel } from '../ui/buildings/BuildingsPanel';
 import { PlayerInventoryPanel } from '../ui/inventory/PlayerInventoryPanel';
 import { MiniMap } from '../ui/hud/MiniMap';
@@ -21,6 +22,8 @@ function App() {
     setIsAuthed,
     selectedNPC,
     handleCloseNPC,
+    selectedDeadDragon,
+    handleCloseDeadDragon,
     showPlayerInventory,
     handleToggleInventory,
     showSettings,
@@ -48,7 +51,7 @@ function App() {
   }
 
   // Detectar si hay algún panel lateral o modal abierto
-  const hasSidePanel = !!selectedNPC || showPlayerInventory || showFollowers;
+  const hasSidePanel = !!selectedNPC || !!selectedDeadDragon || showPlayerInventory || showFollowers;
 
   return (
     <div style={{
@@ -134,6 +137,13 @@ function App() {
         {selectedNPC && (
           <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222', flexShrink: 0 }}>
             <NpcPanel npc={selectedNPC} onClose={handleCloseNPC} />
+          </div>
+        )}
+
+        {/* Panel Dead Dragon - lateral derecho (pequeño informativo aliado) */}
+        {selectedDeadDragon && (
+          <div style={{ width: 330, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222', flexShrink: 0 }}>
+            <DeadDragonPanel dragon={selectedDeadDragon} onClose={handleCloseDeadDragon} />
           </div>
         )}
 

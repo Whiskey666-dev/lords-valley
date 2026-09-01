@@ -4,10 +4,12 @@ import { getBinding, isRebindingActive, isConsoleOpenActive } from "../../ui/inp
 import { useGameStore } from "../../app/store/useGameStore";
 import { fetchSettlementsByOwner } from "../../app/api/settlement.api";
 import { type NpcPanelData } from "../character/useNpcPanel";
+import type { DeadDragonPanelData } from "../../ui/character/DeadDragonPanel";
 
 export function useAppController() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
+  const [selectedDeadDragon, setSelectedDeadDragon] = useState<DeadDragonPanelData | null>(null);
   const [zoom, setZoom] = useState(50);
   const [showPlayerInventory, setShowPlayerInventory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -137,9 +139,23 @@ export function useAppController() {
 
     const handleNPCSelect = (event: Event) => {
       const customEvent = event as CustomEvent<NpcPanelData>;
+      // Si es Dead Dragon, no abrir NpcPanel (lo maneja DeadDragonPanel)
+      if ((customEvent.detail as any)?.isDeadDragon) return;
       setSelectedNPC(customEvent.detail);
+      setSelectedDeadDragon(null);
     };
     const handleNPCClose = () => setSelectedNPC(null);
+    const handleDeadDragonSelect = (event: Event) => {
+      const customEvent = event as CustomEvent<DeadDragonPanelData>;
+      setSelectedDeadDragon(customEvent.detail);
+      setSelectedNPC(null);
+    };
+    const handleDeadDragonClose = () => setSelectedDeadDragon(null);
+    const handleDeadDragonUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<DeadDragonPanelData>).detail;
+      if (!detail) return;
+      setSelectedDeadDragon(prev => (prev && prev.id === detail.id ? detail : prev));
+    };
     const handleZoomSync = (e: Event) => {
       const z = (e as CustomEvent<number>).detail;
       if (typeof z === "number") setZoom(Math.min(100, Math.max(0, Math.round(z))));
@@ -149,7 +165,15 @@ export function useAppController() {
     };
 
     window.addEventListener("phaser-npc-selected", handleNPCSelect);
-    window.addEventListener("phaser-npc-deselected", handleNPCClose);
+    window.addEventListener("phaser-dead-dragon-selected" as any, handleDeadDragonSelect as EventListener);
+    window.addEventListener("phaser-dead-dragon-deselected" as any, handleDeadDragonClose as EventListener);
+    window.addEventListener("phaser-dead-dragon-updated" as any, handleDeadDragonUpdated as EventListener);
+    // ESC cierra ambos paneles
+    const handleCloseBoth = () => {
+      handleNPCClose();
+      handleDeadDragonClose();
+    };
+    window.addEventListener("phaser-npc-deselected", handleCloseBoth);
     window.addEventListener("phaser-zoom-sync", handleZoomSync);
     window.addEventListener("phaser-action-inventory", handleToggleInventory);
     window.addEventListener("phaser-action-config", handleToggleSettings);
@@ -162,7 +186,10 @@ export function useAppController() {
 
     return () => {
       window.removeEventListener("phaser-npc-selected", handleNPCSelect);
-      window.removeEventListener("phaser-npc-deselected", handleNPCClose);
+      window.removeEventListener("phaser-dead-dragon-selected" as any, handleDeadDragonSelect as EventListener);
+      window.removeEventListener("phaser-dead-dragon-deselected" as any, handleDeadDragonClose as EventListener);
+      window.removeEventListener("phaser-dead-dragon-updated" as any, handleDeadDragonUpdated as EventListener);
+      window.removeEventListener("phaser-npc-deselected", handleCloseBoth);
       window.removeEventListener("phaser-zoom-sync", handleZoomSync);
       window.removeEventListener("phaser-action-inventory", handleToggleInventory);
       window.removeEventListener("phaser-action-config", handleToggleSettings);
@@ -218,12 +245,19 @@ export function useAppController() {
     useGameStore.getState().clearSelection();
   };
 
+  const handleCloseDeadDragon = () => {
+    setSelectedDeadDragon(null);
+  };
+
   return {
     isAuthed,
     setIsAuthed,
     selectedNPC,
     setSelectedNPC,
     handleCloseNPC,
+    selectedDeadDragon,
+    setSelectedDeadDragon,
+    handleCloseDeadDragon,
     showPlayerInventory,
     setShowPlayerInventory,
     handleToggleInventory,

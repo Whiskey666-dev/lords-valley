@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHUNK_PX, CHUNK_TILES, TILE, WORLD_CHUNKS, isMineralTile } from "../world/Terrain";
+import { CHUNK_TILES, WORLD_CHUNKS, isMineralTileFast, tileToIso, isoToTile, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
 
 /**
  * MineralPhysics.ts - Sistema de física para minerales.
@@ -40,8 +40,9 @@ export class MineralPhysicsManager {
     return `${cx}:${cy}`;
   }
 
-  private worldToChunk(worldX: number, worldY: number): { cx: number; cy: number } {
-    return { cx: Math.floor(worldX / CHUNK_PX), cy: Math.floor(worldY / CHUNK_PX) };
+  private worldToChunk(isoX: number, isoY: number): { cx: number; cy: number } {
+    const { tileX, tileY } = isoToTile(isoX, isoY);
+    return { cx: Math.floor(tileX / 32), cy: Math.floor(tileY / 32) };
   }
 
   /** Sincroniza colliders de minerales para los 3x3 chunks alrededor de la cámara. Throttle 512px. */
@@ -98,19 +99,20 @@ export class MineralPhysicsManager {
       for (let x = 0; x < CHUNK_TILES; x++) {
         const wx = cx * CHUNK_TILES + x;
         const wy = cy * CHUNK_TILES + y;
-        if (!isMineralTile(wx, wy)) continue;
-        const worldX = cx * CHUNK_PX + x * TILE + TILE / 2;
-        const worldY = cy * CHUNK_PX + y * TILE + TILE / 2;
-        // create en staticGroup con textura invisible
-        const img = this.group.create(worldX, worldY, "mineral_pixel") as Phaser.Physics.Arcade.Image;
-        img.setDisplaySize(TILE, TILE);
+        if (!isMineralTileFast(wx, wy)) continue;
+        const iso = tileToIso(wx, wy);
+        const isoX = iso.x + ISO_TILE_W/2;
+        const isoY = iso.y + ISO_TILE_H/2;
+        // create en staticGroup en coords isométricas (Bottom-Center del rombo)
+        const img = this.group.create(isoX, isoY, "mineral_pixel") as Phaser.Physics.Arcade.Image;
+        img.setDisplaySize(ISO_TILE_W/2, ISO_TILE_H/2);
         img.setAlpha(0);
         // Alpha 0 pero cuerpo colisionable; refreshBody para que el tamaño coincida con displaySize
         if ((img as any).refreshBody) (img as any).refreshBody();
         // Asegurar que el cuerpo sea del tamaño del tile
         const body = img.body as Phaser.Physics.Arcade.StaticBody;
         if (body) {
-          body.setSize(TILE, TILE);
+          body.setSize(ISO_TILE_W/2, ISO_TILE_H/2);
           body.updateFromGameObject();
         }
         objs.push(img);

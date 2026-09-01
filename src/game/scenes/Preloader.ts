@@ -40,6 +40,10 @@ import jumpRightUp from "../../assets/sprites/player/Jump - NEW/Normal/Jump_Righ
 import jumpLeftDown from "../../assets/sprites/player/Jump - NEW/Normal/Jump_Left_Down.png";
 import jumpLeftUp from "../../assets/sprites/player/Jump - NEW/Normal/Jump_Left_Up.png";
 
+// --- Dead Dragon (200x200, 8 frames) ---
+import deadDragonIdle from "../../assets/sprites/dead dragon/idle.png";
+import deadDragonWalk from "../../assets/sprites/dead dragon/walk.png";
+
 export class Preloader extends Phaser.Scene {
   constructor() {
     super("Preloader");
@@ -89,6 +93,12 @@ export class Preloader extends Phaser.Scene {
     this.load.spritesheet("player_jump_right_up", jumpRightUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_jump_left_down", jumpLeftDown, { frameWidth: FRAME_W, frameHeight: FRAME_H });
     this.load.spritesheet("player_jump_left_up", jumpLeftUp, { frameWidth: FRAME_W, frameHeight: FRAME_H });
+
+    // Dead Dragon — 200x200 8 frames (1600x200 sheet) — idle y walk separados
+    this.load.spritesheet("dead_dragon_idle_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
+    this.load.spritesheet("dead_dragon_walk_sheet", deadDragonWalk, { frameWidth: 200, frameHeight: 200 });
+    // Compat: alias antiguo si código espera dead_dragon_sheet (apunta a idle)
+    this.load.spritesheet("dead_dragon_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
 
     // Texto de carga
     this.add.text(16, 16, "Cargando Lords Valley...", { color: "#ffffff" });

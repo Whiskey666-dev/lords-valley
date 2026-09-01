@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT } from '../world/Terrain';
 
 export class CameraController {
   private velocity = new Phaser.Math.Vector2(0, 0);
@@ -10,7 +11,7 @@ export class CameraController {
   private camera: Phaser.Cameras.Scene2D.Camera;
   private followMode = true;
 
-  constructor(camera: Phaser.Cameras.Scene2D.Camera, worldW = 6144, worldH = 6144) {
+  constructor(camera: Phaser.Cameras.Scene2D.Camera, worldW = ISO_WORLD_WIDTH, worldH = ISO_WORLD_HEIGHT) {
     this.camera = camera;
     this.worldW = worldW;
     this.worldH = worldH;
@@ -56,7 +57,6 @@ export class CameraController {
   }
 
   update(dt: number) {
-    // Solo inercia tras drag; WASD es para movimiento del Player, no cámara libre
     if (this.velocity.length() > 1) {
       this.camera.scrollX = Phaser.Math.Clamp(this.camera.scrollX + this.velocity.x * dt, 0, this.worldW - this.camera.width / this.camera.zoom);
       this.camera.scrollY = Phaser.Math.Clamp(this.camera.scrollY + this.velocity.y * dt, 0, this.worldH - this.camera.height / this.camera.zoom);

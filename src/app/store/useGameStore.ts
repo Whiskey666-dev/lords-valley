@@ -111,10 +111,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   patchSurvivor: (id: string, patch: any) =>
-    set((s) => ({
-      survivors: s.survivors.map((sv) => (sv.id === id ? { ...sv, ...patch } : sv)),
-      settlement: s.settlement ? { ...s.settlement, survivors: s.settlement.survivors.map((sv: any) => (sv.id === id ? { ...sv, ...patch } : sv)) } : null,
-    })),
+    set((s) => {
+      // Single-pass O(N) sin doble map + evita copias si no hay cambio
+      const idx = s.survivors.findIndex((sv) => sv.id === id);
+      if (idx === -1) return {} as any;
+      const nextSurvivors = s.survivors.slice();
+      nextSurvivors[idx] = { ...nextSurvivors[idx], ...patch };
+      let nextSettlement = s.settlement;
+      if (s.settlement?.survivors) {
+        const sIdx = s.settlement.survivors.findIndex((sv: any) => sv.id === id);
+        if (sIdx !== -1) {
+          const survCopy = s.settlement.survivors.slice();
+          survCopy[sIdx] = { ...survCopy[sIdx], ...patch };
+          nextSettlement = { ...s.settlement, survivors: survCopy };
+        }
+      }
+      return { survivors: nextSurvivors, settlement: nextSettlement } as any;
+    }),
 
   selectSurvivor: (id: string | null) => set({ selectedId: id, selectedBuildingId: null }),
   selectBuilding: (id: string | null) => set({ selectedBuildingId: id, selectedId: null }),
@@ -139,20 +152,26 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setChunk: (c: any) =>
     set((s) => {
+      const key = chunkKey(c.chunkX, c.chunkY);
+      if (s.chunks.get(key) === c) return {} as any; // evita re-render si mismo objeto
       const next = new Map(s.chunks);
-      next.set(chunkKey(c.chunkX, c.chunkY), c);
+      // LRU simple: máximo 60 chunks (6x6=36 + margen), evita crecimiento infinito
+      if (next.size >= 60) {
+        const first = next.keys().next().value as string;
+        next.delete(first);
+      }
+      next.set(key, c);
       return { chunks: next };
     }),
 
   getLvyDisplay: () => {
     const s = get().settlement;
     if (!s) return '0';
-    // Keep raw string, format with decimals trimming (18 decimals)
     const raw: string = s.lvyBalance ?? '0';
     try {
       const bi = BigInt(raw);
-      const whole = bi / BigInt(1e18);
-      return whole.toString(); // display whole coins, keep string intact in store
+      const whole = bi / 1000000000000000000n;
+      return whole.toString();
     } catch {
       return raw;
     }

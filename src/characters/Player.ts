@@ -4,7 +4,7 @@ import { BaseHuman } from "./BaseHuman";
 import type { Direction8 } from "./Animations";
 import * as InputSystem from "../game/systems/InputSystem";
 import { isGameInputBlocked } from "../ui/input/KeyBindings";
-import { isBlockedWorldXY } from "../game/world/Terrain";
+import { collisionMatrix } from "../game/world/CollisionMatrix";
 
 export class Player extends BaseHuman {
   private isJumping = false;
@@ -19,9 +19,7 @@ export class Player extends BaseHuman {
   private executeJump() {
     if (this.isJumping || this.isDashing || CombatSystem.isAttacking(this)) return;
     this.isJumping = true;
-    // No bloquea velocidad: permite desplazarse mientras salta
     this.playJump(this.lastDirection);
-    // Efecto visual top-down aumentado para salto más visible
     this.scene.tweens.add({
       targets: this,
       scaleX: 1.12,
@@ -42,9 +40,8 @@ export class Player extends BaseHuman {
 
   private executeDash() {
     if (this.isDashing || this.isJumping || CombatSystem.isAttacking(this)) return;
-    // Evita dash hacia mineral/agua (si destino inmediato bloqueado)
-    const dashSpeed = 500;
-    const dashDuration = 225; // 150ms *1.5 = 225ms
+    const dashSpeed = 520;
+    const dashDuration = 200;
     const dir = this.lastDirection;
     let vx = 0, vy = 0;
     if (dir.includes("up")) vy = -1;
@@ -55,7 +52,7 @@ export class Player extends BaseHuman {
       if (dir === "up") vy = -1;
       if (dir === "down") vy = 1;
       if (dir === "left") vx = -1;
-      if (dir === "right") vx = 1;
+      if (dir === "right") vy = 1;
     }
     const dashDist = dashSpeed * (dashDuration / 1000);
     const targetX = this.x + vx * dashDist;
@@ -71,59 +68,76 @@ export class Player extends BaseHuman {
     });
   }
 
-  private isBodyBlockedAt(worldX: number, worldY: number): boolean {
-    // Hitbox 20x20 offset 14,36 anchored 0.5,0.5 => left=x-10 right=x+10 top=y+4 bottom=y+24
-    // Bloquea minerales y agua (isBlockedWorldXY = mineral || agua)
-    const left = worldX - 10;
-    const right = worldX + 10;
-    const top = worldY + 4;
-    const bottom = worldY + 24;
-    const cx = worldX;
-    const cy = (top + bottom) / 2;
-    // 5 puntos: 4 esquinas + centro del cuerpo
-    return (
-      isBlockedWorldXY(left, top) ||
-      isBlockedWorldXY(right, top) ||
-      isBlockedWorldXY(left, bottom) ||
-      isBlockedWorldXY(right, bottom) ||
-      isBlockedWorldXY(cx, cy) ||
-      isBlockedWorldXY(cx, top) ||
-      isBlockedWorldXY(cx, bottom)
-    );
+  private isBodyBlockedAt(isoX: number, isoY: number): boolean {
+    return collisionMatrix.isBodyBlockedAt(isoX, isoY);
   }
 
+  /**
+   * Sistema de deslizamiento fluido para superficies isométricas 2:1.
+   * Si choca contra cualquier cara diagonal (SE, SO, NE, NO) o recta,
+   * proyecta el movimiento suavemente a lo largo de la tangente del obstáculo.
+   */
   private filterMovementByTerrain(xDir: number, yDir: number): { xDir: number; yDir: number } {
     if (xDir === 0 && yDir === 0) return { xDir, yDir };
-    // Prueba desplazamiento en X e Y por separado para permitir deslizamiento
-    const testDist = 10; // ~ mitad del hitbox, asegura que probamos el siguiente tile
+
+    const testDist = 6;
     const nextX = this.x + xDir * testDist;
     const nextY = this.y + yDir * testDist;
-    const blockedX = xDir !== 0 && this.isBodyBlockedAt(nextX, this.y);
-    const blockedY = yDir !== 0 && this.isBodyBlockedAt(this.x, nextY);
-    const blockedDiag = xDir !== 0 && yDir !== 0 && this.isBodyBlockedAt(nextX, nextY);
-    let fx = xDir, fy = yDir;
-    if (blockedDiag && !blockedX && !blockedY) {
-      // diagonal bloqueada pero ejes libres -> mantener ejes (deslizamiento ya natural, no bloquear)
+
+    // Si el camino directo está libre, avanzar normalmente
+    if (!this.isBodyBlockedAt(nextX, nextY)) {
+      return { xDir, yDir };
     }
-    if (blockedX) fx = 0;
-    if (blockedY) fy = 0;
-    // Si ambos ejes bloqueados, queda (0,0)
-    // Si diagonal bloqueada y ambos ejes bloqueados, ya es 0,0
-    return { xDir: fx, yDir: fy };
+
+    // Candidatos de deslizamiento: tangentes isométricas 2:1 y componentes por eje
+    const candidates: Array<{ x: number; y: number; dot: number }> = [];
+
+    // Componentes de eje directo
+    if (xDir !== 0) candidates.push({ x: xDir, y: 0, dot: 1 });
+    if (yDir !== 0) candidates.push({ x: 0, y: yDir, dot: 1 });
+
+    // Tangentes diagonales isométricas (aristas del rombo)
+    const isoTangents = [
+      { x: 1, y: -0.5 },
+      { x: -1, y: -0.5 },
+      { x: 1, y: 0.5 },
+      { x: -1, y: 0.5 },
+      { x: 0.8, y: -0.8 },
+      { x: -0.8, y: -0.8 },
+      { x: 0.8, y: 0.8 },
+      { x: -0.8, y: 0.8 },
+    ];
+
+    for (const t of isoTangents) {
+      const dot = t.x * xDir + t.y * yDir;
+      if (dot > 0.01) {
+        candidates.push({ x: t.x, y: t.y, dot });
+      }
+    }
+
+    // Ordenar de mayor a menor afinidad con la dirección de avance deseada
+    candidates.sort((a, b) => b.dot - a.dot);
+
+    // Probar el primer vector de deslizamiento libre
+    for (const cand of candidates) {
+      const candX = this.x + cand.x * testDist;
+      const candY = this.y + cand.y * testDist;
+      if (!this.isBodyBlockedAt(candX, candY)) {
+        return { xDir: cand.x, yDir: cand.y };
+      }
+    }
+
+    return { xDir: 0, yDir: 0 };
   }
 
   updateEntity() {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const speed = 160;
+    const speed = 200;
 
-    // Si chat/consola abierto o rebinding, anula movimiento y animaciones para priorizar escritura
     if (isGameInputBlocked()) {
       body.setVelocity(0);
       if (!this.isDashing && !CombatSystem.isAttacking(this) && !this.isJumping) {
         this.playIdle();
-      } else if (this.isJumping) {
-        // Durante salto, congela desplazamiento mientras consola abierta
-        body.setVelocity(0);
       }
       return;
     }
@@ -145,7 +159,7 @@ export class Player extends BaseHuman {
 
     if (this.isJumping) {
       body.setVelocity(0);
-      const jumpSpeed = 184;
+      const jumpSpeed = 220;
       let { xDir, yDir } = InputSystem.getMovementVector(this.scene);
       ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
       if (xDir !== 0) body.setVelocityX(xDir * jumpSpeed);
@@ -160,24 +174,24 @@ export class Player extends BaseHuman {
 
     let { xDir, yDir, dir } = InputSystem.getMovementVector(this.scene);
     ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
-    // Recalcula dir tras filtrar minerales/agua para animación correcta
+
     if (xDir === 0 && yDir === 0) {
       dir = "";
     } else if (dir !== "") {
-      // Si el vector original fue bloqueado parcialmente, recalcular dirección física
       const recalculated = (() => {
-        if (xDir === -1 && yDir === 0) return "left";
-        if (xDir === 1 && yDir === 0) return "right";
-        if (xDir === 0 && yDir === -1) return "up";
-        if (xDir === 0 && yDir === 1) return "down";
-        if (xDir === -1 && yDir === -1) return "up_left";
-        if (xDir === 1 && yDir === -1) return "up_right";
-        if (xDir === -1 && yDir === 1) return "down_left";
-        if (xDir === 1 && yDir === 1) return "down_right";
+        if (xDir < -0.1 && Math.abs(yDir) < 0.2) return "left";
+        if (xDir > 0.1 && Math.abs(yDir) < 0.2) return "right";
+        if (Math.abs(xDir) < 0.2 && yDir < -0.1) return "up";
+        if (Math.abs(xDir) < 0.2 && yDir > 0.1) return "down";
+        if (xDir < -0.1 && yDir < -0.1) return "up_left";
+        if (xDir > 0.1 && yDir < -0.1) return "up_right";
+        if (xDir < -0.1 && yDir > 0.1) return "down_left";
+        if (xDir > 0.1 && yDir > 0.1) return "down_right";
         return dir;
       })();
       dir = recalculated as typeof dir;
     }
+
     if (xDir !== 0) body.setVelocityX(xDir * speed);
     if (yDir !== 0) body.setVelocityY(yDir * speed);
     if (body.velocity.x !== 0 && body.velocity.y !== 0) {
