@@ -91,8 +91,10 @@ function App() {
         isConstructionOpen={showConstruction}
       />
 
-      {/* MiniMap: oculto cuando hay panel lateral o mapa mundial abierto */}
-      {!hasSidePanel && !showMap && <MiniMap />}
+      {/* MiniMap: oculto mediante CSS cuando hay panel lateral o mapa mundial abierto para 0 coste de montaje */}
+      <div style={{ display: (hasSidePanel || showMap) ? 'none' : 'block' }}>
+        <MiniMap />
+      </div>
 
       {/* Tooltip informativo de minerales al hover */}
       <MineralTooltip />

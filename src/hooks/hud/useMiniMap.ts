@@ -29,6 +29,11 @@ const STORAGE_POS_KEY = "lordsvalley_minimap_position";
 const STORAGE_VISIBLE_KEY = "lordsvalley_minimap_visible";
 const STORAGE_FOG_EXPLORED_KEY = "lordsvalley_fog_explored_v1";
 
+// Cache singleton persistente: 0 recalculaciones y 0 re-renderizaciones al abrir/cerrar paneles
+let globalBaseCanvas: HTMLCanvasElement | null = null;
+let globalFogCanvas: HTMLCanvasElement | null = null;
+let isBaseBaked = false;
+
 function getFogStorageKey(): string {
   try {
     const pid = localStorage.getItem("playerId") || (JSON.parse(localStorage.getItem("player") || "null")?.id) || localStorage.getItem("settlementId") || "global";
@@ -40,8 +45,8 @@ function getFogStorageKey(): string {
 
 export function useMiniMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const baseCanvasRef = useRef<HTMLCanvasElement | null>(globalBaseCanvas);
+  const fogCanvasRef = useRef<HTMLCanvasElement | null>(globalFogCanvas);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [miniZoom, setMiniZoom] = useState(1);
@@ -60,13 +65,14 @@ export function useMiniMap() {
   const updateFogCanvas = useCallback(() => {
     const OFF_W = 600;
     const OFF_H = 300;
-    let fCanvas = fogCanvasRef.current;
+    let fCanvas = globalFogCanvas;
     if (!fCanvas) {
       fCanvas = document.createElement("canvas");
       fCanvas.width = OFF_W;
       fCanvas.height = OFF_H;
-      fogCanvasRef.current = fCanvas;
+      globalFogCanvas = fCanvas;
     }
+    fogCanvasRef.current = fCanvas;
     const fCtx = fCanvas.getContext("2d");
     if (!fCtx) return;
 
@@ -202,17 +208,21 @@ export function useMiniMap() {
     return () => clearInterval(id);
   }, [markExploredAround]);
 
-  // Pre-hornear el mapa isométrico base una sola vez al montar (0 re-renders, 0 lag, terreno permanente)
+  // Pre-hornear el mapa isométrico base una sola vez a nivel global
   useEffect(() => {
+    if (isBaseBaked && globalBaseCanvas) {
+      baseCanvasRef.current = globalBaseCanvas;
+      return;
+    }
+
     const OFF_W = 600;
     const OFF_H = 300;
-    let baseCanvas = baseCanvasRef.current;
-    if (!baseCanvas) {
-      baseCanvas = document.createElement("canvas");
-      baseCanvas.width = OFF_W;
-      baseCanvas.height = OFF_H;
-      baseCanvasRef.current = baseCanvas;
-    }
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = OFF_W;
+    baseCanvas.height = OFF_H;
+    globalBaseCanvas = baseCanvas;
+    baseCanvasRef.current = baseCanvas;
+
     const bCtx = baseCanvas.getContext("2d");
     if (!bCtx) return;
 
@@ -288,7 +298,8 @@ export function useMiniMap() {
       }
       bCtx.fill();
     }
-  }, []); // Hornear una sola vez al inicio: terreno 100% permanente e inmutable
+    isBaseBaked = true;
+  }, []);
 
   useEffect(() => {
     const onClear = () => {
@@ -342,8 +353,8 @@ export function useMiniMap() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const baseCanvas = baseCanvasRef.current;
-    const fogCanvas = fogCanvasRef.current;
+    const baseCanvas = baseCanvasRef.current || globalBaseCanvas;
+    const fogCanvas = fogCanvasRef.current || globalFogCanvas;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
