@@ -374,6 +374,8 @@ export const MINERAL_LABELS: Record<string, string> = {
   CARBON: "Carbón",
   COBRE: "Cobre",
   ESTANO: "Estaño",
+  ESTAÑO: "Estaño",
+  ESTE: "Estaño",
   HIERRO: "Hierro",
   PLATA: "Plata",
   ORO: "Oro",
@@ -382,18 +384,22 @@ export const MINERAL_LABELS: Record<string, string> = {
 export const MINERAL_DESCRIPTIONS: Record<string, string> = {
   CARBON: "Combustible básico para hornos y forja",
   COBRE: "Metal blando para herramientas y cableado",
-  ESTANO: "Aleación esencial para bronce",
+  ESTANO: "Aleación esencial para bronce y forja",
+  ESTAÑO: "Aleación esencial para bronce y forja",
+  ESTE: "Aleación esencial para bronce y forja",
   HIERRO: "Metal resistente para armas y estructuras",
   PLATA: "Metal precioso, comercio y orfebrería",
   ORO: "Metal muy raro y valioso",
 };
 
 export function getMineralDisplayName(type: string): string {
-  return MINERAL_LABELS[type] ?? type;
+  const upper = (type || "").toUpperCase().trim();
+  return MINERAL_LABELS[upper] ?? MINERAL_LABELS[type] ?? (type === "ESTE" ? "Estaño" : type);
 }
 
 export function getMineralDescription(type: string): string {
-  return MINERAL_DESCRIPTIONS[type] ?? "Veta mineral";
+  const upper = (type || "").toUpperCase().trim();
+  return MINERAL_DESCRIPTIONS[upper] ?? MINERAL_DESCRIPTIONS[type] ?? "Veta mineral";
 }
 
 export function isBlockedTile(worldTileX: number, worldTileY: number): boolean {

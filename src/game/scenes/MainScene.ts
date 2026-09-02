@@ -14,7 +14,8 @@ import { collisionMatrix } from "../world/CollisionMatrix";
 import { StaticGroundLayer } from "../layers/StaticGroundLayer";
 import { DynamicLayer } from "../layers/DynamicLayer";
 import { ChunkRenderer } from "../entities/ChunkRenderer";
-import { fetchPlayer, savePlayerPos } from "../../app/api/player.api";
+import { FarmPlacementSystem } from "../systems/FarmPlacementSystem";
+import { savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
 
@@ -27,6 +28,7 @@ export class MainScene extends Phaser.Scene {
   private chunkRenderer!: ChunkRenderer;
   private staticGround!: StaticGroundLayer;
   private dynamicLayer!: DynamicLayer;
+  private farmPlacementSystem!: FarmPlacementSystem;
   private cameraFollow = true;
   private lastViewportEmit = 0;
   private lastCameraX = 0;
@@ -58,6 +60,7 @@ export class MainScene extends Phaser.Scene {
     this.setupNpcListeners();
     this.setupDeadDragonListeners();
     this.chatSystem = new ChatBubbleSystem(this);
+    this.farmPlacementSystem = new FarmPlacementSystem(this);
 
     setupCamera(this, this.player, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
     this.setupRTSOverlay();
@@ -302,44 +305,7 @@ export class MainScene extends Phaser.Scene {
       }
     } catch {}
 
-    this.player.setInteractive({ useHandCursor: true });
     this.dynamicLayer?.add(this.player as any);
-
-    this.player.on('pointerdown', async (pointer: Phaser.Input.Pointer) => {
-      if ((pointer as any).middleButtonDown?.() || (pointer as any).rightButtonDown?.()) return;
-      try {
-        const settlement = (useGameStore as any).getState?.().settlement;
-        const playerId = settlement?.ownerId || localStorage.getItem('playerId');
-        if (!playerId) return;
-        const dto = await fetchPlayer(playerId);
-        window.dispatchEvent(new CustomEvent('phaser-npc-selected', { detail: {
-          id: dto.id,
-          name: dto.username,
-          profession: 'Player',
-          loyalty: 100,
-          health: 100,
-          isPlayer: true,
-          email: dto.email,
-          username: dto.username,
-          settings: dto.settings,
-          createdAt: dto.createdAt,
-          positionX: this.player.x,
-          positionY: this.player.y,
-        }}));
-      } catch (e) {
-        window.dispatchEvent(new CustomEvent('phaser-npc-selected', { detail: {
-          id: 'player',
-          name: 'Tú (Player)',
-          profession: 'Player',
-          loyalty: 100,
-          health: 100,
-          isPlayer: true,
-          positionX: this.player.x,
-          positionY: this.player.y,
-        }}));
-      }
-      try { (useGameStore as any).getState?.().clearSelection?.(); } catch {}
-    });
 
     console.log("[MainScene] Player spawneado en", this.player.x.toFixed(0), this.player.y.toFixed(0));
     this.time.addEvent({ delay: 5000, loop: true, callback: () => this.savePlayerPos() });
@@ -422,6 +388,10 @@ export class MainScene extends Phaser.Scene {
     // Renderizado dinámico de chunks visibles
     if (this.chunkRenderer && this.cameras.main) {
       this.chunkRenderer.update(this.cameras.main);
+    }
+
+    if (this.farmPlacementSystem) {
+      this.farmPlacementSystem.update();
     }
 
     // Ordenamiento por profundidad de entidades dinámicas

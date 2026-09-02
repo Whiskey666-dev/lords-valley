@@ -1,20 +1,43 @@
-# ui/construction / Context — UI de Construcción (Reservado vacío)
+# src/ui/construction/context.md — Taller de Construcción
 
-## Propósito
-UI de **construcción** — ghost preview, menú edificios, costos. `ui/menus/Navbar` botón **Construcción** verde `#2e7d32` dispara `phaser-action-construction` sin handler real — esta UI lo consumirá. `ui/buildings/BuildingsPanel` (modal 1060×670) ya cubre gestión de edificios existentes/bloqueados pero no ghost placement.
+> Panel de construcción de edificios con sistema de mejoras por capítulos de misión y modo de colocación isométrica con ghost preview.
 
-## Estado Real
-> **Vacío — solo `context.md`.** Glob `src/ui/construction/*` únicamente este archivo. `buildings/*` 3 archivos 0 bytes, real en `hooks/buildings/buildingsData`.
+## Archivos
 
-## Rol Previsto
-| Archivo | Rol Previsto |
-|---|---|
-| `ConstructionMenu.tsx` | Grid `BuildingType` con iconos + costos `Economy.canAfford` + `onSelect(type)` → ghost. |
-| `GhostPreview.tsx` | Sprite fantasma sigue cursor, verde/rojo `Construction.canPlace`, confirma click → `Building.create(blueprint)` + `Jobs.create`. |
-| `BuildingInfoPanel.tsx` | Al seleccionar edificio construido, muestra `progress, workersAssigned, Production` recetas. |
+### `ConstructionPanel.tsx` — Panel de Construcción
+- Hook: `useConstruction` (`hooks/construction/useConstruction`)
+- **56 edificios** organizados en 7 categorías (de `hooks/buildings/buildingsData.ts`)
+- **Sistema de mejoras**: cada edificio tiene mejoras por capítulo de misión (supervivencia → asentamiento → señorío → ducado → conquista → imperio)
+- Filtros: por categoría (select), por estado (construido/bloqueado), búsqueda de texto
+- Expand/collapse por edificio para mostrar mejoras disponibles
+- Botón especial para `b_cropplot` → dispara `phaser-start-placement` y cierra el panel
 
-## Dependencias Previstas
-- `buildings/Building`, `buildings/Construction`, `settlement/Economy`, `ui/input/KeyBindings`, `Phaser.Scene` (ghost sprite)
+**Flujo de colocación de parcela**:
+```
+[Clic "🌱 Colocar Parcela con Mouse"]
+  → useConstruction.handleStartPlacement("b_cropplot")
+  → dispatch "phaser-start-placement" {buildingId: "b_cropplot"}
+  → onClose() → cierra ConstructionPanel
+  → FarmPlacementSystem.startPlacement() → modo ghost activo
+  → [Clic en tile válido] → farmPlotManager.placePlot()
+```
 
-## Para Repomix
-Implementar cuando `buildings/Building.ts` exista. Montar `ConstructionMenu` desde `app/App` `showConstruction` similar a `showBuildings` + `TutorialPanel`. Reusar `hooks/buildings/buildingsData:CATEGORY_INFO` y `BuildingData` como modelo. No duplicar `BuildingsPanel` lista — ese es gestión; este es colocación.
+## Hook `useConstruction` (`hooks/construction/useConstruction.ts`)
+- Estado: `filterCategory`, `filterStatus`, `search`, `expandedId`, `buildings`
+- `handleStartPlacement(id)`: dispara evento Phaser + cierra panel
+- `handleConstruct(id)`: para edificios normales, actualiza estado a `existing`
+- `getUpgradesForBuilding(b)`: genera mejoras basadas en tier del edificio y capítulos requeridos
+- `ALL_CATEGORIES`: lista ordenada de categorías de edificios
+- `stats`: total/existing/locked calculados desde `buildings`
+
+## Mejoras por Tier y Capítulo
+| Tier del Edificio | Mejoras Generadas | Capítulos Requeridos |
+|---|---|---|
+| T1 | 3 mejoras | asentamiento → señorío → imperio |
+| T2 | 3 mejoras | ducado → conquista → imperio |
+| T3 | 2 mejoras | conquista → imperio |
+
+## Relación con Otros Módulos
+- **`buildingsData.ts`**: datos de 56 edificios con `icon`, `name`, `description`, `category`, `tier`, `unlockCost`, `inventory`, `workers`
+- **`missionsData.ts`**: `MISSION_CATEGORIES` para colores y etiquetas de capítulos
+- **`FarmPlacementSystem.ts`**: receptor del evento de colocación

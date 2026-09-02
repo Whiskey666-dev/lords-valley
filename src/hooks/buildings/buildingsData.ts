@@ -72,8 +72,39 @@ export const CATEGORY_INFO: Record<BuildingCategory, { label: string; icon: stri
 
 export const INITIAL_BUILDINGS: BuildingData[] = [
   // ══════════════════════════════════════════════════════════════════════════
-  // 1. RECOLECCIÓN Y EXTRACCIÓN (MATERIAS PRIMAS)
+  // 1. RECOLECCIÓN Y EXTRACCIÓN (MATERIAS PRIMAS Y AGRICULTURA)
   // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: "b_cropplot",
+    name: "Parcela de Cultivo",
+    category: "extraction",
+    categoryLabel: "Agricultura",
+    categoryIcon: "🌱",
+    status: "existing",
+    tier: 1,
+    icon: "🌱",
+    description: "Tierra arada y fertilizada lista para sembrar cereales, hortalizas, frutas y plantas industriales. Ciclo de 24 horas con 4 fases de crecimiento.",
+    durability: 100,
+    maxDurability: 100,
+    efficiency: 100,
+    level: 1,
+    maxWorkers: 2,
+    maxInventoryWeight: 600,
+    workers: [
+      { id: "w1", professionRequired: "Agricultor", role: "trabajador", efficiency: 100 },
+      { id: "w2", professionRequired: "Agricultor", role: "trabajador", efficiency: 0 },
+    ],
+    inventory: [
+      { id: "seeds_wheat", name: "Semillas de Trigo", icon: "🌾", quantity: 20, maxCapacity: 200, unit: "uds", category: "Semillas" },
+      { id: "fertilizer", name: "Abono Orgánico", icon: "🍂", quantity: 15, maxCapacity: 100, unit: "sacos", category: "Insumo" },
+    ],
+    recipe: {
+      inputs: [{ name: "Agua", icon: "💧", rate: "2 L/día" }, { name: "Semillas", icon: "🌱", rate: "1 ud/siembra" }],
+      outputs: [{ name: "Cosecha Agrícola", icon: "🌾", rate: "Variable (24h)" }],
+      durationSec: 86400,
+    },
+    unlockCost: [{ name: "Madera", amount: 10, icon: "🪵" }, { name: "Piedra", amount: 5, icon: "🪨" }],
+  },
   {
     id: "b_woodcamp",
     name: "Cabaña de Leñadores",

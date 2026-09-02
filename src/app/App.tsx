@@ -13,6 +13,7 @@ import { MineralTooltip } from '../ui/hud/MineralTooltip';
 import { MissionsPanel } from '../ui/missions/MissionsPanel';
 import { SkillsPanel } from '../ui/skills/SkillsPanel';
 import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
+import { CropPlantingModal } from '../ui/farming/CropPlantingModal';
 import { FogOverlay } from '../ui/hud/FogOverlay';
 import { LoadingScreen } from '../ui/loading/LoadingScreen';
 import { AuthScreen } from './auth/AuthScreen';
@@ -21,6 +22,10 @@ function App() {
   const {
     isAuthed,
     setIsAuthed,
+    showCharacter,
+    characterData,
+    handleToggleCharacter,
+    handleCloseCharacter,
     selectedNPC,
     handleCloseNPC,
     selectedDeadDragon,
@@ -42,6 +47,8 @@ function App() {
     handleToggleSkills,
     showConstruction,
     handleToggleConstruction,
+    selectedFarmPlot,
+    handleCloseCropPlot,
     zoom,
     handleZoomIn,
     handleZoomOut,
@@ -52,7 +59,7 @@ function App() {
   }
 
   // Detectar si hay algún panel lateral o modal abierto
-  const hasSidePanel = !!selectedNPC || !!selectedDeadDragon || showPlayerInventory || showFollowers;
+  const hasSidePanel = showCharacter || !!selectedNPC || !!selectedDeadDragon || !!selectedFarmPlot || showPlayerInventory || showFollowers;
 
   return (
     <div style={{
@@ -73,6 +80,7 @@ function App() {
         zoom={zoom}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
+        onToggleCharacter={handleToggleCharacter}
         onOpenSettings={handleToggleSettings}
         onToggleInventory={handleToggleInventory}
         onToggleFollowers={handleToggleFollowers}
@@ -81,6 +89,7 @@ function App() {
         onToggleMissions={handleToggleMissions}
         onToggleSkills={handleToggleSkills}
         onToggleConstruction={handleToggleConstruction}
+        isCharacterOpen={showCharacter}
         isInventoryOpen={showPlayerInventory}
         isSettingsOpen={showSettings}
         isFollowersOpen={showFollowers}
@@ -118,16 +127,21 @@ function App() {
       {/* Panel de Construcción — 56 edificios 7 categorías + mejoras por capítulo */}
       {showConstruction && <ConstructionPanel onClose={handleToggleConstruction} />}
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
-        {/* Panel Seguidores - lateral izquierdo */}
+      {/* Modal de Siembra y Cosecha de Parcelas de Cultivo */}
+      {selectedFarmPlot && (
+        <CropPlantingModal plotStatus={selectedFarmPlot} onClose={handleCloseCropPlot} />
+      )}
+
+      <div style={{ display: 'flex', flex: 1, width: '100%', height: 'calc(100vh - 32px)', overflow: 'hidden', position: 'relative' }}>
+        {/* Panel Seguidores - lateral izquierdo (fixed) */}
         {showFollowers && <FollowersPanel onClose={handleToggleFollowers} />}
 
         {/* Contenedor del juego + niebla DOM que cubre TODO el terreno cargado */}
-        <div style={{ flex: 1, height: '100%', position: 'relative', overflow: 'hidden', display: 'flex' }}>
+        <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', display: 'flex' }}>
           <div
             id="game-container"
             style={{
-              flex: 1,
+              width: '100%',
               height: '100%',
               display: 'flex',
               justifyContent: 'center',
@@ -139,21 +153,30 @@ function App() {
           {!showMap && <FogOverlay />}
         </div>
 
-        {/* Panel NPC - lateral derecho */}
-        {selectedNPC && (
-          <div style={{ width: 320, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222', flexShrink: 0 }}>
-            <NpcPanel npc={selectedNPC} onClose={handleCloseNPC} />
-          </div>
+        {/* Panel Personaje (Jugador Principal) - lateral derecho (fixed overlay) */}
+        {showCharacter && (
+          <NpcPanel npc={characterData || {
+            id: 'player',
+            name: 'Señor Feudal',
+            profession: 'Gobernante',
+            loyalty: 100,
+            health: 100,
+            isPlayer: true,
+            edad: 28,
+          }} onClose={handleCloseCharacter} />
         )}
 
-        {/* Panel Dead Dragon - lateral derecho (pequeño informativo aliado) */}
+        {/* Panel NPC / Seguidor - lateral derecho (fixed overlay) */}
+        {!showCharacter && selectedNPC && (
+          <NpcPanel npc={selectedNPC} onClose={handleCloseNPC} />
+        )}
+
+        {/* Panel Dead Dragon - lateral derecho (fixed overlay) */}
         {selectedDeadDragon && (
-          <div style={{ width: 330, overflowY: 'auto', background: '#0a0a0a', borderLeft: '1px solid #222', flexShrink: 0 }}>
-            <DeadDragonPanel dragon={selectedDeadDragon} onClose={handleCloseDeadDragon} />
-          </div>
+          <DeadDragonPanel dragon={selectedDeadDragon} onClose={handleCloseDeadDragon} />
         )}
 
-        {/* Inventario - lateral derecho */}
+        {/* Inventario - lateral derecho (fixed overlay) */}
         {showPlayerInventory && (
           <PlayerInventoryPanel onClose={() => handleToggleInventory()} />
         )}

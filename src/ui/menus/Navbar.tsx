@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavbar } from "../../hooks/menu/useNavbar";
 
 interface Props {
+  onToggleCharacter?: () => void;
   onOpenSettings?: () => void;
   onToggleInventory?: () => void;
   onToggleFollowers?: () => void;
@@ -10,6 +11,7 @@ interface Props {
   onToggleMissions?: () => void;
   onToggleSkills?: () => void;
   onToggleConstruction?: () => void;
+  isCharacterOpen?: boolean;
   isInventoryOpen?: boolean;
   isSettingsOpen?: boolean;
   isFollowersOpen?: boolean;
@@ -37,6 +39,7 @@ const btnBase: React.CSSProperties = {
 };
 
 const symbolMap: Record<string, string> = {
+  character: "👤",
   followers: "👥",
   buildings: "🏰",
   construction: "🔨",
@@ -109,6 +112,7 @@ function HoverBtn({
  * Ahora los botones muestran solo símbolo y revelan texto al hover.
  */
 export function Navbar({
+  onToggleCharacter,
   onOpenSettings,
   onToggleInventory,
   onToggleFollowers,
@@ -117,6 +121,7 @@ export function Navbar({
   onToggleMissions,
   onToggleSkills,
   onToggleConstruction,
+  isCharacterOpen = false,
   isInventoryOpen = false,
   isSettingsOpen = false,
   isFollowersOpen = false,
@@ -130,6 +135,7 @@ export function Navbar({
   onZoomOut,
 }: Props) {
   const { leftButtons, rightButtons, dispatchAction } = useNavbar({
+    onToggleCharacter,
     onOpenSettings,
     onToggleInventory,
     onToggleFollowers,
@@ -138,6 +144,7 @@ export function Navbar({
     onToggleMissions,
     onToggleSkills,
     onToggleConstruction,
+    isCharacterOpen,
     isInventoryOpen,
     isSettingsOpen,
     isFollowersOpen,

@@ -3,13 +3,18 @@ import { startLaunchGame } from "../../game/main";
 import { getBinding, isRebindingActive, isConsoleOpenActive } from "../../ui/input/KeyBindings";
 import { useGameStore } from "../../app/store/useGameStore";
 import { fetchSettlementsByOwner } from "../../app/api/settlement.api";
+import { fetchPlayer } from "../../app/api/player.api";
 import { type NpcPanelData } from "../character/useNpcPanel";
 import type { DeadDragonPanelData } from "../../ui/character/DeadDragonPanel";
+import type { FarmPlotStatus } from "../../game/farming/FarmPlotManager";
 
 export function useAppController() {
   const gameRef = useRef<Phaser.Game | null>(null);
+  const [showCharacter, setShowCharacter] = useState(false);
+  const [characterData, setCharacterData] = useState<NpcPanelData | null>(null);
   const [selectedNPC, setSelectedNPC] = useState<NpcPanelData | null>(null);
   const [selectedDeadDragon, setSelectedDeadDragon] = useState<DeadDragonPanelData | null>(null);
+  const [selectedFarmPlot, setSelectedFarmPlot] = useState<FarmPlotStatus | null>(null);
   const [zoom, setZoom] = useState(50);
   const [showPlayerInventory, setShowPlayerInventory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -24,6 +29,21 @@ export function useAppController() {
   const survivors = useGameStore((s) => s.survivors);
   const selectedId = useGameStore((s) => s.selectedId);
   const fetchSettlement = useGameStore((s) => s.fetchSettlement);
+
+  const handleToggleCharacter = useCallback(() => {
+    setShowCharacter(prev => {
+      const next = !prev;
+      if (next) {
+        setSelectedNPC(null);
+        setSelectedDeadDragon(null);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCloseCharacter = useCallback(() => {
+    setShowCharacter(false);
+  }, []);
 
   const handleToggleInventory = useCallback(() => {
     setShowPlayerInventory(prev => !prev);
@@ -52,6 +72,7 @@ export function useAppController() {
   const handleToggleSkills = useCallback(() => {
     setShowSkills(prev => !prev);
   }, []);
+
   const handleToggleConstruction = useCallback(() => {
     setShowConstruction(prev => !prev);
   }, []);
@@ -72,27 +93,83 @@ export function useAppController() {
     };
   }, []);
 
-  // Hidratar settlement del usuario autenticado
+  // Hidratar settlement y datos del jugador autenticado
   useEffect(() => {
     if (!isAuthed) return;
     const load = async () => {
       let sid = localStorage.getItem("settlementId");
-      if (!sid) {
-        const playerRaw = localStorage.getItem("player");
-        const playerId = localStorage.getItem("playerId") || (playerRaw ? JSON.parse(playerRaw).id : null);
-        if (playerId) {
-          try {
-            const list = await fetchSettlementsByOwner(playerId);
-            if (list.length > 0) {
-              sid = list[0].id;
-              localStorage.setItem("settlementId", sid);
-            }
-          } catch (e) {
-            console.warn("[App] fetchSettlements error", e);
-          }
+      const playerRaw = localStorage.getItem("player");
+      const parsedPlayer = playerRaw ? JSON.parse(playerRaw) : null;
+      const playerId = localStorage.getItem("playerId") || (parsedPlayer ? parsedPlayer.id : null);
+
+      if (playerId) {
+        try {
+          const dto = await fetchPlayer(playerId);
+          setCharacterData({
+            id: dto.id,
+            name: dto.username || "Señor Feudal",
+            profession: "Gobernante",
+            loyalty: 100,
+            health: 100,
+            isPlayer: true,
+            email: dto.email,
+            username: dto.username,
+            settings: dto.settings,
+            createdAt: dto.createdAt,
+            edad: 28,
+            attributes: {
+              strength: 15,
+              agility: 14,
+              endurance: 16,
+              intelligence: 18,
+              charisma: 20,
+              perception: 16,
+            },
+            needs: {
+              health: 100,
+              hunger: 20,
+              thirst: 15,
+              fatigue: 10,
+              sanity: 100,
+              safety: 100,
+            },
+          } as NpcPanelData);
+        } catch {
+          setCharacterData({
+            id: playerId,
+            name: parsedPlayer?.username || "Señor Feudal",
+            profession: "Gobernante",
+            loyalty: 100,
+            health: 100,
+            isPlayer: true,
+            username: parsedPlayer?.username || "Player",
+            edad: 28,
+          } as NpcPanelData);
         }
-        if (!sid) sid = import.meta.env.VITE_SETTLEMENT_ID || null;
+      } else {
+        setCharacterData({
+          id: "player",
+          name: "Señor Feudal",
+          profession: "Gobernante",
+          loyalty: 100,
+          health: 100,
+          isPlayer: true,
+          edad: 28,
+        } as NpcPanelData);
       }
+
+      if (!sid && playerId) {
+        try {
+          const list = await fetchSettlementsByOwner(playerId);
+          if (list.length > 0) {
+            sid = list[0].id;
+            localStorage.setItem("settlementId", sid);
+          }
+        } catch (e) {
+          console.warn("[App] fetchSettlements error", e);
+        }
+      }
+      if (!sid) sid = import.meta.env.VITE_SETTLEMENT_ID || null;
       if (sid) {
         fetchSettlement(sid).catch(() => console.warn("[App] fetchSettlement failed", sid));
       }
@@ -102,10 +179,13 @@ export function useAppController() {
 
   // Sincronización de selectedId de Zustand a selectedNPC
   useEffect(() => {
+    if (!selectedId) {
+      setSelectedNPC(null);
+      return;
+    }
     const sv = survivors.find((s) => s.id === selectedId);
-    if (!sv || !selectedId) {
-      setTimeout(() => setSelectedNPC(null), 0);
-    } else {
+    if (sv) {
+      setShowCharacter(false);
       setSelectedNPC({
         id: sv.id,
         name: sv.firstName + " " + sv.lastName,
@@ -118,7 +198,7 @@ export function useAppController() {
     }
   }, [selectedId, survivors]);
 
-  // Ciclo de vida de Phaser y suscripciones de eventos de ventana
+  // Ciclo de vida de Phaser: se inicializa UNA SOLA VEZ cuando isAuthed es true
   useEffect(() => {
     if (!isAuthed) return;
     if (!gameRef.current) {
@@ -137,16 +217,27 @@ export function useAppController() {
       }, 200);
     }
 
+    return () => {
+      if (gameRef.current) {
+        gameRef.current.destroy(true);
+        gameRef.current = null;
+      }
+    };
+  }, [isAuthed]);
+
+  // Suscripciones de eventos de ventana (UI/Phaser bridge)
+  useEffect(() => {
     const handleNPCSelect = (event: Event) => {
       const customEvent = event as CustomEvent<NpcPanelData>;
-      // Si es Dead Dragon, no abrir NpcPanel (lo maneja DeadDragonPanel)
       if ((customEvent.detail as any)?.isDeadDragon) return;
+      setShowCharacter(false);
       setSelectedNPC(customEvent.detail);
       setSelectedDeadDragon(null);
     };
     const handleNPCClose = () => setSelectedNPC(null);
     const handleDeadDragonSelect = (event: Event) => {
       const customEvent = event as CustomEvent<DeadDragonPanelData>;
+      setShowCharacter(false);
       setSelectedDeadDragon(customEvent.detail);
       setSelectedNPC(null);
     };
@@ -164,17 +255,26 @@ export function useAppController() {
       if (e.ctrlKey) e.preventDefault();
     };
 
+    const handleCropPlotSelect = (event: Event) => {
+      const detail = (event as CustomEvent<FarmPlotStatus>).detail;
+      setSelectedFarmPlot(detail);
+    };
+
+    const handleCloseBoth = () => {
+      setShowCharacter(false);
+      handleNPCClose();
+      handleDeadDragonClose();
+      setSelectedFarmPlot(null);
+    };
+
     window.addEventListener("phaser-npc-selected", handleNPCSelect);
     window.addEventListener("phaser-dead-dragon-selected" as any, handleDeadDragonSelect as EventListener);
     window.addEventListener("phaser-dead-dragon-deselected" as any, handleDeadDragonClose as EventListener);
     window.addEventListener("phaser-dead-dragon-updated" as any, handleDeadDragonUpdated as EventListener);
-    // ESC cierra ambos paneles
-    const handleCloseBoth = () => {
-      handleNPCClose();
-      handleDeadDragonClose();
-    };
+    window.addEventListener("phaser-crop-plot-selected" as any, handleCropPlotSelect as EventListener);
     window.addEventListener("phaser-npc-deselected", handleCloseBoth);
     window.addEventListener("phaser-zoom-sync", handleZoomSync);
+    window.addEventListener("phaser-action-character", handleToggleCharacter);
     window.addEventListener("phaser-action-inventory", handleToggleInventory);
     window.addEventListener("phaser-action-config", handleToggleSettings);
     window.addEventListener("phaser-action-buildings", handleToggleBuildings);
@@ -189,8 +289,10 @@ export function useAppController() {
       window.removeEventListener("phaser-dead-dragon-selected" as any, handleDeadDragonSelect as EventListener);
       window.removeEventListener("phaser-dead-dragon-deselected" as any, handleDeadDragonClose as EventListener);
       window.removeEventListener("phaser-dead-dragon-updated" as any, handleDeadDragonUpdated as EventListener);
+      window.removeEventListener("phaser-crop-plot-selected" as any, handleCropPlotSelect as EventListener);
       window.removeEventListener("phaser-npc-deselected", handleCloseBoth);
       window.removeEventListener("phaser-zoom-sync", handleZoomSync);
+      window.removeEventListener("phaser-action-character", handleToggleCharacter);
       window.removeEventListener("phaser-action-inventory", handleToggleInventory);
       window.removeEventListener("phaser-action-config", handleToggleSettings);
       window.removeEventListener("phaser-action-buildings", handleToggleBuildings);
@@ -199,30 +301,30 @@ export function useAppController() {
       window.removeEventListener("phaser-action-habilidades", handleToggleSkills);
       window.removeEventListener("phaser-action-construction", handleToggleConstruction);
       window.removeEventListener("wheel", handleWheel);
-      if (gameRef.current) {
-        gameRef.current.destroy(true);
-        gameRef.current = null;
-      }
     };
-  }, [isAuthed, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills, handleToggleConstruction]);
+  }, [handleToggleCharacter, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills, handleToggleConstruction]);
 
-  // Atajo de teclado global (Inventario + Misiones)
+  // Atajo de teclado global (Personaje + Inventario + Misiones)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isRebindingActive() || isConsoleOpenActive()) return;
       const inventoryKey = getBinding("inventory");
       const missionsKey = getBinding("missions");
+      const statsKey = getBinding("stats");
       if (e.key.toUpperCase() === inventoryKey) {
         e.preventDefault();
         handleToggleInventory();
       } else if (e.key.toUpperCase() === missionsKey) {
         e.preventDefault();
         handleToggleMissions();
+      } else if (e.key.toUpperCase() === statsKey) {
+        e.preventDefault();
+        handleToggleCharacter();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleToggleInventory, handleToggleMissions]);
+  }, [handleToggleCharacter, handleToggleInventory, handleToggleMissions]);
 
   const handleZoomIn = () => {
     setZoom(z => {
@@ -249,15 +351,26 @@ export function useAppController() {
     setSelectedDeadDragon(null);
   };
 
+  const handleCloseCropPlot = () => {
+    setSelectedFarmPlot(null);
+  };
+
   return {
     isAuthed,
     setIsAuthed,
+    showCharacter,
+    characterData,
+    handleToggleCharacter,
+    handleCloseCharacter,
     selectedNPC,
     setSelectedNPC,
     handleCloseNPC,
     selectedDeadDragon,
     setSelectedDeadDragon,
     handleCloseDeadDragon,
+    selectedFarmPlot,
+    setSelectedFarmPlot,
+    handleCloseCropPlot,
     showPlayerInventory,
     setShowPlayerInventory,
     handleToggleInventory,

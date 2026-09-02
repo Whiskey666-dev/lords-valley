@@ -1,14 +1,4 @@
-import { useEffect, useState } from "react";
-import {
-  COMPORTAMIENTOS,
-  FUNCIONES,
-  HABILIDAD_CATEGORIAS,
-  HABILIDADES_DETALLE,
-  HABILIDAD_LABELS,
-  type DeadDragonComportamiento,
-  type DeadDragonFuncion,
-  type DeadDragonHabilidadCategoria,
-} from "../../characters/DeadDragon";
+import { useDeadDragonPanel } from "../../hooks/character/useDeadDragonPanel";
 
 export interface DeadDragonPanelData {
   id: string;
@@ -26,12 +16,12 @@ export interface DeadDragonPanelData {
   orden?: string;
   ordenesDisponibles?: string[];
   // nuevo sistema 3 categorías
-  comportamiento?: DeadDragonComportamiento;
-  funcion?: DeadDragonFuncion;
-  comportamientosDisponibles?: DeadDragonComportamiento[];
-  funcionesDisponibles?: DeadDragonFuncion[];
+  comportamiento?: string;
+  funcion?: string;
+  comportamientosDisponibles?: string[];
+  funcionesDisponibles?: string[];
   habilidadesActivas?: string[];
-  habilidadCategorias?: DeadDragonHabilidadCategoria[];
+  habilidadCategorias?: string[];
   habilidadesDetalle?: Record<string, string[]>;
   habilidadLabels?: Record<string, string>;
   habilidadesSeleccionadas?: Record<string, string[]>;
@@ -56,156 +46,33 @@ interface Props {
 }
 
 export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
-  const [dragon, setDragon] = useState<DeadDragonPanelData>(initialDragon);
-  const [showHabilidadesMenu, setShowHabilidadesMenu] = useState(false);
+  const {
+    dragon, showHabilidadesMenu, setShowHabilidadesMenu,
+    salud, maxSalud, energia, maxEnergia,
+    saludPct, energiaPct,
+    disponibles, bloqueados, ocupados, items,
+    comportamiento, funcion,
+    habilidadesActivas, habilidadesSeleccionadas,
+    hasHogar, hogarPos,
+    COMPORTAMIENTOS, FUNCIONES, HABILIDAD_CATEGORIAS, HABILIDADES_DETALLE, HABILIDAD_LABELS,
+    handleComportamiento, handleFuncion,
+    handleToggleHabilidadCat, handleToggleHabilidad,
+    handleSetHogar, handleEquip, handleDamage, handleAddTestItem,
+  } = useDeadDragonPanel(initialDragon, onClose);
 
-  useEffect(() => {
-    setDragon(initialDragon);
-  }, [initialDragon]);
-
-  useEffect(() => {
-    const onUpdated = (e: Event) => {
-      const detail = (e as CustomEvent<DeadDragonPanelData>).detail;
-      if (detail && detail.id === dragon.id) setDragon(detail);
-    };
-    window.addEventListener("phaser-dead-dragon-updated" as any, onUpdated as EventListener);
-    window.addEventListener("phaser-dead-dragon-selected" as any, (e: Event) => {
-      const d = (e as CustomEvent<DeadDragonPanelData>).detail;
-      if (d && d.id === dragon.id) setDragon(d);
-    });
-    const onHogarSet = (e: Event) => {
-      const d = (e as CustomEvent<any>).detail;
-      if (d && d.id === dragon.id) {
-        // will be followed by updated event, but optimistic
-      }
-    };
-    window.addEventListener("phaser-dead-dragon-hogar-set" as any, onHogarSet as EventListener);
-    return () => {
-      window.removeEventListener("phaser-dead-dragon-updated" as any, onUpdated as EventListener);
-      window.removeEventListener("phaser-dead-dragon-hogar-set" as any, onHogarSet as EventListener);
-    };
-  }, [dragon.id]);
-
-  // Cerrar menu habilidades al click fuera
-  useEffect(() => {
-    if (!showHabilidadesMenu) return;
-    const onClick = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (!t.closest("[data-dd-habilidades]")) setShowHabilidadesMenu(false);
-    };
-    window.addEventListener("click", onClick);
-    return () => window.removeEventListener("click", onClick);
-  }, [showHabilidadesMenu]);
-
-  const salud = dragon.salud ?? dragon.health ?? 1500;
-  const maxSalud = dragon.maxSalud ?? dragon.maxHealth ?? 1500;
-  const energia = dragon.energia ?? 900;
-  const maxEnergia = dragon.maxEnergia ?? 900;
-  const saludPct = Math.max(0, Math.min(100, Math.round((salud / maxSalud) * 100)));
-  const energiaPct = Math.max(0, Math.min(100, Math.round((energia / maxEnergia) * 100)));
-
-  const slotsTotal = dragon.inventorySlots?.total ?? 20;
-  const disponibles = dragon.inventorySlots?.disponibles ?? (dragon.equipment?.hasMochila ? 20 : 5);
-  const bloqueados = dragon.inventorySlots?.bloqueados ?? (dragon.equipment?.hasMochila ? 0 : 15);
-  const ocupados = dragon.inventorySlots?.ocupados ?? dragon.inventoryItems?.length ?? 0;
-  const items = dragon.inventoryItems ?? [];
   const isAlly = dragon.isAlly;
-
-  const comportamiento = (dragon.comportamiento ?? "Pacifico") as DeadDragonComportamiento;
-  const funcion = (dragon.funcion ?? "Espera aqui") as DeadDragonFuncion;
-  const habilidadesActivas = new Set<string>(dragon.habilidadesActivas ?? []);
-  const habilidadesSeleccionadas: Record<string, string[]> = dragon.habilidadesSeleccionadas ?? {};
-  const hasHogar = !!dragon.hasHogar;
-  const hogarPos = dragon.hogar ?? dragon.hogarPos ?? null;
-
-  const handleComportamiento = (c: DeadDragonComportamiento) => {
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-set-comportamiento" as any, { detail: { id: dragon.id, comportamiento: c } }));
-    setDragon(prev => ({ ...prev, comportamiento: c } as any));
-  };
-  const handleFuncion = (f: DeadDragonFuncion) => {
-    if (f === "Ve a casa" && !hasHogar) {
-      // No hogar: avisa y no cambia (o igual cambia pero muestra warning)
-      // Permitimos cambio pero UI muestra advertencia
-    }
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-set-funcion" as any, { detail: { id: dragon.id, funcion: f } }));
-    setDragon(prev => ({ ...prev, funcion: f } as any));
-  };
-  const handleToggleHabilidadCat = (cat: DeadDragonHabilidadCategoria) => {
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-toggle-habilidad-cat" as any, { detail: { id: dragon.id, categoria: cat } }));
-    setDragon(prev => {
-      const cur = new Set(prev.habilidadesActivas ?? []);
-      if (cur.has(cat)) cur.delete(cat);
-      else cur.add(cat);
-      return { ...prev, habilidadesActivas: Array.from(cur) } as any;
-    });
-  };
-  const handleToggleHabilidad = (cat: DeadDragonHabilidadCategoria, hab: string) => {
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-toggle-habilidad" as any, { detail: { id: dragon.id, categoria: cat, habilidad: hab } }));
-    setDragon(prev => {
-      const cur = { ...(prev.habilidadesSeleccionadas ?? {}) } as Record<string, string[]>;
-      const arr = new Set(cur[cat] ?? []);
-      if (arr.has(hab)) arr.delete(hab);
-      else arr.add(hab);
-      cur[cat] = Array.from(arr);
-      return { ...prev, habilidadesSeleccionadas: cur } as any;
-    });
-  };
-  const handleSetHogar = () => {
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-set-hogar" as any, { detail: { id: dragon.id } }));
-    // Optimistic: usa posición actual del dragon o player
-    const px = dragon.positionX ?? dragon.x ?? 3072;
-    const py = dragon.positionY ?? dragon.y ?? 3072;
-    setDragon(prev => ({ ...prev, hogar: { x: px, y: py }, hasHogar: true, hogarPos: { x: px, y: py } } as any));
-  };
-  const handleEquip = (slot: "montura" | "mochila") => {
-    const isEquipped = slot === "mochila" ? !!dragon.equipment?.mochila : !!dragon.equipment?.montura;
-    if (isEquipped) {
-      if (slot === "mochila") {
-        window.dispatchEvent(new CustomEvent("phaser-dead-dragon-equip" as any, { detail: { id: dragon.id, slot, item: null } }));
-        window.dispatchEvent(new CustomEvent("phaser-dead-dragon-unequip" as any, { detail: { id: dragon.id, slot } }));
-        setDragon(prev => ({
-          ...prev,
-          equipment: { ...prev.equipment!, mochila: null, hasMochila: false } as any,
-          inventorySlots: { total: 20, disponibles: 5, bloqueados: 15, ocupados: Math.min(ocupados, 5) }
-        }));
-      } else {
-        window.dispatchEvent(new CustomEvent("phaser-dead-dragon-unequip" as any, { detail: { id: dragon.id, slot } }));
-        setDragon(prev => ({ ...prev, equipment: { ...prev.equipment!, montura: null } as any }));
-      }
-    } else {
-      window.dispatchEvent(new CustomEvent("phaser-dead-dragon-equip" as any, { detail: { id: dragon.id, slot } }));
-      if (slot === "mochila") {
-        setDragon(prev => ({
-          ...prev,
-          equipment: { ...prev.equipment!, mochila: { id: "moch_demo", nombre: "Mochila de Cuero", cantidad: 1 }, hasMochila: true } as any,
-          inventorySlots: { total: 20, disponibles: 20, bloqueados: 0, ocupados: prev.inventorySlots?.ocupados ?? 0 }
-        }));
-      } else {
-        setDragon(prev => ({
-          ...prev,
-          equipment: { ...prev.equipment!, montura: { id: "mnt_demo", nombre: "Montura Ósea", cantidad: 1 } } as any
-        }));
-      }
-    }
-  };
-  const handleDamage = () => {
-    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-damage" as any, { detail: { id: dragon.id, cantidad: 250 } }));
-  };
 
   return (
     <div
       style={{
-        width: "320px",
-        minWidth: "280px",
-        maxWidth: "92vw",
+        position: "fixed",
+        right: 0, top: 32, bottom: 0,
+        width: "320px", minWidth: "280px", maxWidth: "92vw",
         borderLeft: isAlly ? "2px solid #a855f7" : "2px solid #ef4444",
         backgroundColor: "#151515",
         boxSizing: "border-box",
-        overflowX: "hidden",
-        overflowY: "auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
+        overflowX: "hidden", overflowY: "auto",
+        display: "flex", flexDirection: "column", gap: 10,
         zIndex: 100,
         boxShadow: "-4px 0 24px #000000aa",
         padding: "14px 14px 18px 14px",
@@ -293,35 +160,20 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
               {COMPORTAMIENTOS.map(c => {
                 const active = comportamiento === c;
                 const color = c === "Agresivo" ? "#ef4444" : c === "Defensivo" ? "#3b82f6" : "#6b7280";
-                const desc =
-                  c === "Agresivo"
-                    ? "Ataca a cualquier enemigo a 10 chunks del jugador"
-                    : c === "Defensivo"
-                      ? "Solo contraataca si el jugador es atacado primero"
-                      : "No ataca (Pacifico)";
+                const desc = c === "Agresivo"
+                  ? "Ataca a cualquier enemigo a 10 chunks del jugador"
+                  : c === "Defensivo"
+                    ? "Solo contraataca si el jugador es atacado primero"
+                    : "No ataca (Pacifico)";
                 return (
-                  <button
-                    key={c}
-                    onClick={() => handleComportamiento(c)}
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      gap: 2,
-                      background: active ? "#2a1212" : "#1e1e1e",
-                      border: active ? `1px solid ${color}` : "1px solid #333",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
+                  <button key={c} onClick={() => handleComportamiento(c as any)}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, background: active ? "#2a1212" : "#1e1e1e", border: active ? `1px solid ${color}` : "1px solid #333", borderRadius: 6, padding: "6px 8px", cursor: "pointer", textAlign: "left" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "space-between" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, border: active ? "2px solid #fff" : "1px solid #555", display: "inline-block" }} />
                         <span style={{ fontSize: 11, color: active ? "#fff" : "#ccc", fontWeight: active ? 700 : 500 }}>{c}</span>
                       </div>
-                      {active && <span style={{ fontSize: 10, color: color }}>●</span>}
+                      {active && <span style={{ fontSize: 10, color }}>●</span>}
                     </div>
                     <span style={{ fontSize: 8, color: "#777", lineHeight: 1.2 }}>{desc}</span>
                   </button>
@@ -340,33 +192,16 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
               {FUNCIONES.map(f => {
                 const active = funcion === f;
                 const disabled = f === "Ve a casa" && !hasHogar;
-                const desc =
-                  f === "Espera aqui"
-                    ? "Se queda inmóvil en el lugar actual"
-                    : f === "Sigueme"
-                      ? "Sigue al jugador a donde vaya"
-                      : hasHogar
-                        ? `Va a hogar ${Math.round(hogarPos!.x)},${Math.round(hogarPos!.y)}`
-                        : "Requiere hogar designado";
+                const desc = f === "Espera aqui"
+                  ? "Se queda inmóvil en el lugar actual"
+                  : f === "Sigueme"
+                    ? "Sigue al jugador a donde vaya"
+                    : hasHogar
+                      ? `Va a hogar ${Math.round(hogarPos!.x)},${Math.round(hogarPos!.y)}`
+                      : "Requiere hogar designado";
                 return (
-                  <button
-                    key={f}
-                    onClick={() => !disabled && handleFuncion(f)}
-                    disabled={disabled}
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      gap: 2,
-                      background: active ? "#0a1f12" : "#1e1e1e",
-                      border: active ? "1px solid #22c55e" : disabled ? "1px dashed #333" : "1px solid #333",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      cursor: disabled ? "not-allowed" : "pointer",
-                      opacity: disabled ? 0.6 : 1,
-                      textAlign: "left",
-                    }}
-                  >
+                  <button key={f} onClick={() => !disabled && handleFuncion(f as any)} disabled={disabled}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, background: active ? "#0a1f12" : "#1e1e1e", border: active ? "1px solid #22c55e" : disabled ? "1px dashed #333" : "1px solid #333", borderRadius: 6, padding: "6px 8px", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1, textAlign: "left" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "space-between" }}>
                       <span style={{ fontSize: 11, color: active ? "#4ade80" : disabled ? "#666" : "#ccc", fontWeight: active ? 700 : 500 }}>{f}</span>
                       {active && <span style={{ fontSize: 10, color: "#22c55e" }}>●</span>}
@@ -377,10 +212,8 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
                 );
               })}
             </div>
-            <button
-              onClick={handleSetHogar}
-              style={{ marginTop: 8, width: "100%", background: hasHogar ? "#14532d" : "#1e3a2a", color: hasHogar ? "#4ade80" : "#a7f3d0", border: `1px solid ${hasHogar ? "#22c55e" : "#2a5a3a"}`, borderRadius: 6, padding: "6px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-            >
+            <button onClick={handleSetHogar}
+              style={{ marginTop: 8, width: "100%", background: hasHogar ? "#14532d" : "#1e3a2a", color: hasHogar ? "#4ade80" : "#a7f3d0", border: `1px solid ${hasHogar ? "#22c55e" : "#2a5a3a"}`, borderRadius: 6, padding: "6px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
               📍 {hasHogar ? "Actualizar Hogar aquí" : "Designar Hogar aquí"} {hasHogar ? `(${Math.round(hogarPos!.x)},${Math.round(hogarPos!.y)})` : ""}
             </button>
             {!hasHogar && <div style={{ fontSize: 8, color: "#f59e0b", marginTop: 4, textAlign: "center" }}>Designa un hogar para habilitar "Ve a casa"</div>}
@@ -399,19 +232,7 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
                 const label = (HABILIDAD_LABELS as any)[cat] ?? cat;
                 const icon = cat === "Ataques Fisicos" ? "⚔️" : cat === "Magia" ? "🔮" : cat === "Soporte" ? "💚" : "☠️";
                 return (
-                  <label
-                    key={cat}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      background: active ? "#1a1530" : "#1e1e1e",
-                      border: active ? "1px solid #7c3aed" : "1px solid #333",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      cursor: "pointer",
-                    }}
-                  >
+                  <label key={cat} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? "#1a1530" : "#1e1e1e", border: active ? "1px solid #7c3aed" : "1px solid #333", borderRadius: 6, padding: "6px 8px", cursor: "pointer" }}>
                     <input type="checkbox" checked={active} onChange={() => handleToggleHabilidadCat(cat)} style={{ accentColor: "#7c3aed" }} />
                     <span style={{ fontSize: 10 }}>{icon}</span>
                     <span style={{ fontSize: 9, color: active ? "#c4b5fd" : "#aaa", fontWeight: active ? 700 : 500 }}>{label}</span>
@@ -421,12 +242,10 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
             </div>
           </div>
 
-          {/* Botón menú habilidades detallado */}
+          {/* Menú de habilidades detallado */}
           <div style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8, padding: 8, flexShrink: 0 }} data-dd-habilidades>
-            <button
-              onClick={() => setShowHabilidadesMenu(v => !v)}
-              style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: showHabilidadesMenu ? "#1a1530" : "#252525", border: "1px solid #444", borderRadius: 6, padding: "7px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-            >
+            <button onClick={() => setShowHabilidadesMenu(v => !v)}
+              style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: showHabilidadesMenu ? "#1a1530" : "#252525", border: "1px solid #444", borderRadius: 6, padding: "7px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               <span>⚙️ Habilidades</span>
               <span style={{ fontSize: 10, color: "#a78bfa", transform: showHabilidadesMenu ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>▼</span>
             </button>
@@ -460,7 +279,7 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
                   );
                 })}
                 <div style={{ fontSize: 8, color: "#666", textAlign: "center", background: "#0f0f0f", padding: "4px 6px", borderRadius: 4, border: "1px dashed #333" }}>
-                  Activa categorías en “Habilidades” y selecciona habilidades aquí. En combate usará solo las marcadas → ahorra energía.
+                  Activa categorías en "Habilidades" y selecciona habilidades aquí. En combate usará solo las marcadas → ahorra energía.
                 </div>
               </div>
             )}
@@ -470,7 +289,7 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
           <div style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, flex: "0 1 auto", minHeight: 140, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700 }}>📦 Inventario</span>
-              <span style={{ fontSize: 8, color: "#666" }}>{ocupados}/{disponibles} · {bloqueados} bloqueados · {slotsTotal} máx</span>
+              <span style={{ fontSize: 8, color: "#666" }}>{ocupados}/{disponibles} · {bloqueados} bloqueados · {dragon.inventorySlots?.total ?? 20} máx</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
               {Array.from({ length: disponibles }).map((_, i) => {
@@ -491,16 +310,7 @@ export function DeadDragonPanel({ dragon: initialDragon, onClose }: Props) {
             <div style={{ fontSize: 7, color: "#555", textAlign: "center", marginTop: 4 }}>{dragon.equipment?.hasMochila ? "Mochila equipada — 20 slots" : "5 libres + 15 bloqueados (equipa Mochila)"}</div>
             <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
               <button onClick={handleDamage} style={{ flex: 1, background: "#2a1212", color: "#fca5a5", border: "1px solid #7f1d1d", borderRadius: 4, padding: "4px 6px", fontSize: 8, cursor: "pointer" }}>Probar daño 250</button>
-              <button onClick={() => {
-                const mock = { id: `mat_${Date.now()}`, nombre: ["Carne","Piel","Hueso","Escama"][Math.floor(Math.random()*4)], cantidad: Math.floor(Math.random()*5)+1, categoria: "Recurso" };
-                window.dispatchEvent(new CustomEvent("phaser-dead-dragon-add-item" as any, { detail: { id: dragon.id, item: mock } }));
-                if (items.length < disponibles) {
-                  setDragon(prev => {
-                    const n = [...(prev.inventoryItems ?? []), mock];
-                    return { ...prev, inventoryItems: n, inventorySlots: { ...prev.inventorySlots!, ocupados: n.length } } as any;
-                  });
-                }
-              }} style={{ flex: 1, background: "#1e1e1e", color: "#888", border: "1px solid #333", borderRadius: 4, padding: "4px 6px", fontSize: 8, cursor: "pointer" }}>+ Item test</button>
+              <button onClick={handleAddTestItem} style={{ flex: 1, background: "#1e1e1e", color: "#888", border: "1px solid #333", borderRadius: 4, padding: "4px 6px", fontSize: 8, cursor: "pointer" }}>+ Item test</button>
             </div>
           </div>
 

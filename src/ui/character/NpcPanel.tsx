@@ -2,7 +2,6 @@ import { useNpcPanel, type NpcPanelData, type NpcTab } from "../../hooks/charact
 import { NpcStatusTab } from "./components/NpcStatusTab";
 import { NpcAttributesTab } from "./components/NpcAttributesTab";
 import { NpcProfessionsTab } from "./components/NpcProfessionsTab";
-import { NpcInventoryTab } from "./components/NpcInventoryTab";
 
 export type { NpcPanelData };
 
@@ -15,7 +14,6 @@ const TABS: { id: NpcTab; label: string }[] = [
   { id: "estado", label: "Estado" },
   { id: "atributos", label: "Atributos" },
   { id: "profesiones", label: "Profesiones" },
-  { id: "inventario", label: "Inventario" },
 ];
 
 export function NpcPanel({ npc, onClose }: Props) {
@@ -36,6 +34,10 @@ export function NpcPanel({ npc, onClose }: Props) {
 
   return (
     <div style={{
+      position: 'fixed',
+      right: 0,
+      top: 32,
+      bottom: 0,
       width: '285px',
       minWidth: '240px',
       maxWidth: '90vw',
@@ -159,7 +161,6 @@ export function NpcPanel({ npc, onClose }: Props) {
         {tab === "estado" && <NpcStatusTab npc={npc} isCore={isCore} />}
         {tab === "atributos" && <NpcAttributesTab npc={npc} isCore={isCore} />}
         {tab === "profesiones" && <NpcProfessionsTab npc={npc} isCore={isCore} />}
-        {tab === "inventario" && <NpcInventoryTab npc={npc} isCore={isCore} />}
       </div>
     </div>
   );

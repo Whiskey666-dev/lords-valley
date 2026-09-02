@@ -1,65 +1,91 @@
-# src / Context — Lords Valley v0.1
-
-> Stack: **Phaser 4.2.1** (Arcade Physics) + **React 19** + **Vite 8** + **TypeScript 6** + **Zustand 5** + **socket.io-client**. Entrada `main.tsx` -> `app/App.tsx` -> `game/main.ts` (`startLaunchGame`).
+# src/context.md — Lords Valley v0.1
+> **Última actualización:** 2026-09-02 | Stack: **Phaser 4.2.1** + **React 19** + **Vite 8** + **TypeScript 6** + **Zustand 5** + **socket.io-client**
+> Entrada: `main.tsx` → `app/App.tsx` → `hooks/app/useAppController` → `game/main.ts` (`startLaunchGame`)
 
 ## Propósito General de `src/`
-`src/` contiene toda la lógica de **Lords Valley**, survival / colony-sim top-down. Arquitectura en 3 capas:
+Contiene toda la lógica de **Lords Valley**, survival/colony-sim top-down isométrico. Arquitectura en 3 capas:
 
-- **Core Phaser** en `game/`, `characters/`, `combat/`, `game/world/` — corre en `#game-container`, mundo `6144×6144` (`WORLD_SIZE = 6144`, `CHUNK_PX=1024`, 6×6 chunks, `TILE=32`, `WORLD_TILES=192`).
-- **Overlay React** en `app/` y `ui/` — `Navbar`, `Console`, `TutorialPanel`, `SettingsPanel`, `NpcPanel`, `FollowersPanel`, `PlayerInventoryPanel`, `BuildingsPanel`, `MiniMap`, `WorldMapPanel`.
-- **Simulación / Datos** en `ai/`, `buildings/`, `items/`, `settlement/`, `save/`, `world/` — mayoría stub a excepción de `game/world/Terrain.ts` implementado y `hooks/buildings/buildingsData.ts` (mock 40+ edificios).
-- **Assets** en `assets/` — sprites `48×64`, 8 frames por tira (`384×64`), 30 sheets activos (Walk/Idle/Dash/Death/Jump ×6 dirs físicas).
+- **Core Phaser** (`game/`) — corre en `#game-container`, mundo `6144×6144` (`WORLD_SIZE=6144`, `CHUNK_PX=1024`, 6×6 chunks, `TILE=32`, `WORLD_TILES=192`)
+- **Overlay React** (`app/`, `ui/`) — paneles, modales, HUD, menús, inventario, NPC, construcción, agricultura
+- **Simulación / Datos** (`ai/`, `buildings/`, `items/`, `settlement/`, `save/`, `world/`) — stubs preparados para la colony-sim completa
 
-## Comunicación Phaser <-> React
+## Comunicación Phaser ↔ React
 Sin imports directos. Bus `window.CustomEvent` + Zustand `useGameStore` + `socket.io`:
-- `Phaser -> React`: `phaser-npc-selected` (Survivor/Player click), `phaser-npc-deselected` (ESC/click suelo), `phaser-toggle-tutorial`, `phaser-zoom-sync`, `phaser-npcs-spawned`, `phaser-chat-bubble`, `phaser-focus-npc`, `phaser-camera-follow`
-- `React -> Phaser`: `phaser-zoom-set` (0..100), `phaser-create-npcs`, `minimap-goto` (`chunkX/Y`), `minimap-goto-world` (`x/y`), `phaser-action-*` (`inventory|map|missions|stats|construction|buildings|config`)
-- Socket: `joinSettlement`, `updateViewport` (viewport chunks), eventos `SURVIVOR_LOYALTY_CHANGED`, `SETTLEMENT_TICK_COMPLETED`, `RESOURCE_EXTRACTED` con verificación `sequenceNumber` en `useGameStore:71`
-- Singleton `ui/input/KeyBindings.ts:isGameInputBlocked()` chequeado cada frame por `MainScene.update` y `Player.updateEntity`.
 
-## Estructura de Módulos (estado real 2026-08-29)
-| Módulo | Estado | Rol | Archivos |
+**Phaser → React:**
+| Evento | Dato | Receptor |
+|---|---|---|
+| `phaser-npc-selected` | `NpcPanelData` | `useAppController` → `NpcPanel` |
+| `phaser-npc-deselected` | — | `useAppController` → cierra paneles |
+| `phaser-dead-dragon-selected` | `DeadDragonPanelData` | `useAppController` → `DeadDragonPanel` |
+| `phaser-dead-dragon-deselected` | — | cierra `DeadDragonPanel` |
+| `phaser-dead-dragon-updated` | `DeadDragonPanelData` | `DeadDragonPanel` reactivo |
+| `phaser-crop-plot-selected` | `FarmPlotStatus` | `useAppController` → `CropPlantingModal` |
+| `phaser-zoom-sync` | `number (0..100)` | Navbar / zoom |
+| `phaser-farm-plots-changed` | `FarmPlotData[]` | `FarmPlacementSystem` |
+| `lords-loading-progress` | `{progress, step}` | `useLoadingScreen` → `LoadingScreen` |
+
+**React → Phaser:**
+| Evento | Dato | Emisor |
+|---|---|---|
+| `phaser-zoom-set` | `number (0..100)` | `useAppController` |
+| `phaser-start-placement` | `{buildingId}` | `useConstruction` → `ConstructionPanel` |
+| `phaser-cancel-placement` | — | `FarmPlacementSystem` |
+| `phaser-placement-mode-changed` | `{active, type?}` | `FarmPlacementSystem` |
+| `phaser-plant-crop` | `{tileX, tileY, cropId}` | externo |
+| `phaser-harvest-crop` | `{tileX, tileY}` | externo |
+| `phaser-dead-dragon-set-comportamiento` | `{id, comportamiento}` | `useDeadDragonPanel` |
+| `phaser-dead-dragon-set-funcion` | `{id, funcion}` | `useDeadDragonPanel` |
+| `phaser-dead-dragon-set-hogar` | `{id}` | `useDeadDragonPanel` |
+| `phaser-action-*` | — | `useAppController` → Phaser |
+| `minimap-goto` | `{chunkX, chunkY}` | `useMiniMap` |
+| `minimap-goto-world` | `{x, y}` | `useWorldMap` |
+
+**Socket.io:** `joinSettlement`, `updateViewport` (throttled 512px/300ms), `SURVIVOR_LOYALTY_CHANGED`, `SETTLEMENT_TICK_COMPLETED`, `RESOURCE_EXTRACTED` con `sequenceNumber`.
+
+## Estructura de Módulos (estado real 2026-09-02)
+| Módulo | Estado | Rol | Archivos clave |
 |---|---|---|---|
-| `app/` | **Implementado** | Root React + controller + store + socket + auth | `App.tsx` (usa `useAppController`), `store/useGameStore.ts`, `socket.ts`, `api/*`, `auth/AuthScreen.tsx` |
-| `game/` | **Implementado** | Orquestador Phaser | `main.ts` (config RESIZE 6144×6144), `scenes/Preloader|MainScene`, `systems/*`×7, `world/Terrain.ts`, `entities/*`×2 |
-| `characters/` | **Implementado (11/12)** | Humanos + animaciones 8 dirs | `BaseHuman`, `Animations` (251 líneas, 6 dirs físicas), `Player`, `Survivor` (inner `SurvivorSprite`), `Stats/Needs/Traits/Skills/Personality/Loyalty/Gustos` |
-| `combat/` | Parcial | `CombatSystem` funcional (anim attack 400ms lock); `Weapons/Damage` stub vacío | `CombatSystem.ts:47` |
-| `ui/` | **Implementado** | React overlay completo | `input/KeyBindings` (251 líneas, 16 acciones), `menus/*`×5, `character/*`×2 + 4 tabs, `inventory/*`, `hud/*`×2, `buildings/BuildingsPanel`, `settlement/*`×2 |
-| `items/` | Parcial | `Inventory`/`Equipment` procedural + `Item.ts` 10 categorías stackables | `Inventory:39`, `Equipment:37`, `Item:123` ; `Resources/Weapons/Food` stub |
-| `assets/` | Implementado | 30 sheets 48×64; Preloader carga 30 | `sprites/player/{Walk,Idle,Dash,Death,Jump}`×6 |
-| `hooks/` | **Implementado** | Lógica desacoplada UI | `app/useAppController`, `buildings/useBuildings+buildingsData`, `character/useNpcPanel|useFollowers`, `hud/useMiniMap|useWorldMap|useWorldInfo`, `inventory/usePlayerInventory`, `menu/*` |
-| `ai/` | **STUB vacío** | 4 archivos 0 bytes | `TaskSystem,Pathfinding,NeedsSystem,DecisionSystem` previstos |
-| `buildings/` | **STUB vacío** | 3 archivos 0 bytes; pero `hooks/buildings/buildingsData.ts` tiene 40+ edificios mock | `Building,Construction,Production` vacíos |
-| `settlement/` | **STUB vacío** | 5 archivos 0 bytes | `Settlement,Jobs,Orders,Economy,Management` previstos |
-| `world/` | **STUB vacío** | 6 archivos 0 bytes (`src/world/*`) | `Time,Seasons,Weather,Map,Chunks,Events` vacíos; **real** en `game/world/Terrain.ts` |
-| `save/` | **STUB vacío** | 3 archivos 0 bytes | `SaveData,SaveSystem,PersistenceSimulation` previstos |
+| `app/` | **Implementado** | Root React + auth + store + socket + APIs | `App.tsx`, `store/useGameStore.ts`, `socket.ts`, `api/*`, `auth/AuthScreen.tsx` |
+| `hooks/` | **Implementado** | Lógica desacoplada por dominio | Ver `hooks/context.md` |
+| `game/` | **Implementado** | Orquestador Phaser 4 | `main.ts`, `scenes/*`, `systems/*`×10, `world/Terrain.ts`, `entities/*`, `farming/*`, `layers/*` |
+| `ui/` | **Implementado** | React overlay completo | `menus/*`, `character/*`, `inventory/*`, `hud/*`, `farming/*`, `construction/*`, `buildings/*`, `missions/*`, `skills/*`, `loading/*` |
+| `characters/` | **Implementado (12/12)** | Humanos + animaciones 8 dirs | `BaseHuman`, `Animations` (6 dirs físicas), `Player`, `Survivor`, `DeadDragon`, `Stats/Needs/Traits/Skills/Personality/Loyalty/Gustos` |
+| `combat/` | Parcial | `CombatSystem` funcional (400ms lock) | `CombatSystem.ts` |
+| `items/` | Parcial | `Inventory`/`Equipment` + `Item.ts` 10 cat. | `Inventory`, `Equipment`, `Item`, `Resources/Weapons/Food` stub |
+| `assets/` | **Implementado** | 30 sheets 48×64 + 29 sprites de cultivo 384×64 | `sprites/player/*`, `sprites/farm seeds/*` |
+| `ai/` | **STUB vacío** | 4 archivos previstos | `TaskSystem`, `Pathfinding`, `NeedsSystem`, `DecisionSystem` |
+| `buildings/` | **STUB vacío** | 3 archivos; datos en `hooks/buildings/buildingsData.ts` | `Building`, `Construction`, `Production` |
+| `settlement/` | **STUB vacío** | 5 archivos | `Settlement`, `Jobs`, `Orders`, `Economy`, `Management` |
+| `world/` | **STUB vacío** | 6 archivos (la implementación real está en `game/world/Terrain.ts`) | `Time`, `Seasons`, `Weather`, `Map`, `Chunks`, `Events` |
+| `save/` | **STUB vacío** | 3 archivos | `SaveData`, `SaveSystem`, `PersistenceSimulation` |
 
 ## Flujo de Datos Actual (slice funcional)
 ```
-assets/sprites --Vite import--> game/scenes/Preloader (30 sheets 48x64)
-  --> characters/Animations (registerHumanAnimations 8 dirs -> 6 físicas)
-  --> characters/BaseHuman (playWalk/Idle/Jump/Dash/Death/Attack)
-  --> characters/Player + characters/Survivor + game/entities/SurvivorSprite (interpolación 0.15)
-  --> game/scenes/MainScene (6144×6144 grid Graphics, init animations, spawnPlayer, ChunkRenderer 3x3, CameraController, savePlayerPos 5s + socket viewport)
-  <---> app/store/useGameStore (Zustand: settlement, survivors, buildings, chunks Map, selectedId, sequenceNumber)
-  <---> app/socket.ts (joinSettlement, updateViewport throttled 512px/300ms)
-  <---> app/App.tsx + hooks/app/useAppController (event bus + tabs Followers/Buildings/Map/Inventory/Settings)
-  --> ui/* (MiniMap circular, WorldMapPanel filtros, BuildingsPanel gestión 7 categorías)
-  --> ui/input/KeyBindings (16 acciones, normalize/display, pressed/justPressed, block flags)
-  --> game/systems/InputSystem adaptador (getMovementVector + is*JustPressed)
-```
-
-## Flujo Futuro Planificado (colony-sim)
-```
-game/world/Terrain (noise, agua contigua 5-15 tiles, minerales vetas 6 tipos 0.02-0.25 rarity)
-  -> world/Time tick (cuando exista) -> ai/NeedsSystem -> ai/DecisionSystem (utility)
-  -> settlement/Jobs -> ai/TaskSystem -> ai/Pathfinding (A* sobre Chunks)
-  -> Survivor.moverEnDireccion -> buildings/Construction -> settlement/Economy -> save/SaveSystem
+assets/sprites --Vite import-->
+  game/scenes/Preloader (30 sheets 48×64 + 29 sprites cultivo 384×64)
+  --> characters/Animations (registerHumanAnimations 8 dirs → 6 físicas)
+  --> characters/Player + Survivor + game/entities/SurvivorSprite
+  --> game/scenes/MainScene (6144×6144, ChunkRenderer 3×3, sistemas)
+       --> game/systems/FarmPlacementSystem (parcelas, ghost preview, cultivos)
+       --> game/systems/FogOfWarSystem (niebla de guerra Phaser)
+       --> game/systems/MineralPhysics + WaterPhysics
+  <---> app/store/useGameStore (Zustand: settlement, survivors, buildings, chunks, selectedId)
+  <---> app/socket.ts (joinSettlement, updateViewport throttled)
+  <---> hooks/app/useAppController (event bus, toggles de paneles, Phaser lifecycle)
+  --> ui/* (paneles React modales y laterales)
+  --> hooks/hud/useMineralTooltip (detección de minerales on-click)
+  --> hooks/farming/useCropPlantingModal (gestión modal siembra/cosecha)
+  --> hooks/construction/useConstruction (56 edificios, ghost placement)
+  --> hooks/loading/useLoadingScreen (barra de progreso en tiempo real)
 ```
 
 ## Convenciones
-- Dominio español (`hambre`, `sed`, `lealtad`, `profesión`) + APIs inglés.
-- Sprites: `48×64`, 8 frames, 6 dirs físicas (`down/up/right_down/right_up/left_down/left_up`) mapeadas desde 8 lógicas vía `LOGICAL_TO_PHYSICAL` (`Animations.ts:69`).
-- Mundo: `6144×6144`, `CHUNK_PX=1024`, `TILE=32`, `CHUNK_TILES=32`, `WORLD_TILES=192`, cámara `centerOn` manual + `CameraController` drag middle/right + zoom `0.6..1.6` ↔ `0..100%` (`CameraSystem:14`).
-- Cámara follow toggle `Y` (`cameraFollow` en KeyBindings), frustum culling `worldView.contains` (`MainScene:224`), `ChunkRenderer` carga 3×3 chunks vía `useGameStore.getChunk`.
-- LVY `BigInt` string 18 decimales (`common/bigint.ts`, `useGameStore:getLvyDisplay`).
+- **Dominio:** español (`hambre`, `sed`, `lealtad`, `profesión`) + APIs en inglés
+- **Sprites personaje:** `48×64`, 8 frames, 6 dirs físicas mapeadas desde 8 lógicas vía `LOGICAL_TO_PHYSICAL`
+- **Sprites cultivo:** `384×64` (6 frames de 64×64), frame 0=semilla, 1-3=crecimiento, 4=maduro, 5=cosechado
+- **Mundo:** `6144×6144`, `CHUNK_PX=1024`, `TILE=32`, `CHUNK_TILES=32`, `WORLD_TILES=192`
+- **Cámara:** `centerOn` manual + `CameraController` drag + zoom `0.6..1.6` ↔ `0..100%`
+- **KeyBindings canónico:** `ui/input/KeyBindings.ts`; `game/input/KeyBindings.ts` es re-export deprecated
+- **Hooks patrón:** cada panel/modal tiene su hook en `hooks/<dominio>/use<Nombre>.ts`
+- **LVY BigInt:** string 18 decimales en `common/bigint.ts`

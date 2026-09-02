@@ -7,6 +7,7 @@ export interface NavButton {
 }
 
 export interface UseNavbarProps {
+  onToggleCharacter?: () => void;
   onOpenSettings?: () => void;
   onToggleInventory?: () => void;
   onToggleFollowers?: () => void;
@@ -15,6 +16,7 @@ export interface UseNavbarProps {
   onToggleMissions?: () => void;
   onToggleSkills?: () => void;
   onToggleConstruction?: () => void;
+  isCharacterOpen?: boolean;
   isInventoryOpen?: boolean;
   isSettingsOpen?: boolean;
   isFollowersOpen?: boolean;
@@ -26,6 +28,7 @@ export interface UseNavbarProps {
 }
 
 export function useNavbar({
+  onToggleCharacter,
   onOpenSettings,
   onToggleInventory,
   onToggleFollowers,
@@ -34,6 +37,7 @@ export function useNavbar({
   onToggleMissions,
   onToggleSkills,
   onToggleConstruction,
+  isCharacterOpen = false,
   isInventoryOpen = false,
   isSettingsOpen = false,
   isFollowersOpen = false,
@@ -43,6 +47,7 @@ export function useNavbar({
   isConstructionOpen = false,
 }: UseNavbarProps = {}) {
   const dispatchAction = (action: string) => {
+    if (action === "character" && onToggleCharacter) { onToggleCharacter(); return; }
     if (action === "config" && onOpenSettings) { onOpenSettings(); return; }
     if (action === "inventory" && onToggleInventory) { onToggleInventory(); return; }
     if (action === "followers" && onToggleFollowers) { onToggleFollowers(); return; }
@@ -57,6 +62,7 @@ export function useNavbar({
   };
 
   const leftButtons: (NavButton & { active?: boolean })[] = [
+    { id: "character", label: `Personaje [${displayKey(getBinding("stats"))}]`, active: isCharacterOpen },
     { id: "followers", label: "Seguidores", active: isFollowersOpen },
     { id: "buildings", label: "Edificios", active: isBuildingsOpen },
   ];
