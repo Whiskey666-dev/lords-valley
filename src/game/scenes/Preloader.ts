@@ -56,6 +56,9 @@ export class Preloader extends Phaser.Scene {
     const FRAME_W = 48;
     const FRAME_H = 64;
 
+    // Fix: emitir progreso inicial para que LoadingScreen salga de 10%
+    window.dispatchEvent(new CustomEvent("lords-loading-progress", { detail: { progress: 12, step: "Iniciando carga de assets..." } }));
+
     // Escuchar progreso real de carga de archivos en Phaser (0% a 50%)
     this.load.on("progress", (value: number) => {
       const pct = Math.round(15 + value * 35);
@@ -64,6 +67,11 @@ export class Preloader extends Phaser.Scene {
           detail: { progress: pct, step: "Cargando sprites y texturas..." },
         })
       );
+    });
+
+    this.load.on("loaderror", (file: any) => {
+      console.warn("[Preloader] loaderror", file?.key || file);
+      window.dispatchEvent(new CustomEvent("lords-loading-progress", { detail: { progress: 50, step: "Continuando pese a error de asset..." } }));
     });
 
     this.load.on("complete", () => {

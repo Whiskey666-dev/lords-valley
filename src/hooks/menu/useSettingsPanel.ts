@@ -17,8 +17,9 @@ export const SETTINGS_CATEGORIES: CategoryInfo[] = [
   { id: "cerrar", label: "Cerrar", icon: "⏻" },
 ];
 
-export function useSettingsPanel(onClose: () => void) {
-  const [category, setCategory] = useState<SettingsCategory>("graficos");
+export function useSettingsPanel(onClose: () => void, hideInicio?: boolean) {
+  const initial: SettingsCategory = hideInicio ? "graficos" : "graficos";
+  const [category, setCategory] = useState<SettingsCategory>(initial);
 
   // Ajustes de gráficos (mock local)
   const [fps, setFps] = useState("60");
@@ -37,6 +38,13 @@ export function useSettingsPanel(onClose: () => void) {
 
   const toggleLiquidos = () => setLiquidos(v => !v);
 
+  const categories = hideInicio ? SETTINGS_CATEGORIES.filter(c => c.id !== "inicio") : SETTINGS_CATEGORIES;
+
+  // si hideInicio y categoría actual es inicio, corregir a graficos
+  useEffect(() => {
+    if (hideInicio && category === "inicio") setCategory("graficos");
+  }, [hideInicio, category]);
+
   return {
     category,
     setCategory,
@@ -50,7 +58,7 @@ export function useSettingsPanel(onClose: () => void) {
     toggleLiquidos,
     particulas,
     setParticulas,
-    categories: SETTINGS_CATEGORIES,
+    categories,
     currentCategory: SETTINGS_CATEGORIES.find(c => c.id === category),
   };
 }

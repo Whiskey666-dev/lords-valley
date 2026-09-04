@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavbar } from "../../hooks/menu/useNavbar";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   onToggleMissions?: () => void;
   onToggleSkills?: () => void;
   onToggleConstruction?: () => void;
+  onToggleTerrain?: () => void;
   isCharacterOpen?: boolean;
   isInventoryOpen?: boolean;
   isSettingsOpen?: boolean;
@@ -20,6 +21,7 @@ interface Props {
   isMissionsOpen?: boolean;
   isSkillsOpen?: boolean;
   isConstructionOpen?: boolean;
+  isTerrainOpen?: boolean;
   zoom?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -44,6 +46,7 @@ const symbolMap: Record<string, string> = {
   buildings: "🏰",
   construction: "🔨",
   habilidades: "✨",
+  terreno: "⛰️",
   missions: "📜",
   inventory: "🎒",
   map: "🗺️",
@@ -121,6 +124,7 @@ export function Navbar({
   onToggleMissions,
   onToggleSkills,
   onToggleConstruction,
+  onToggleTerrain,
   isCharacterOpen = false,
   isInventoryOpen = false,
   isSettingsOpen = false,
@@ -130,10 +134,26 @@ export function Navbar({
   isMissionsOpen = false,
   isSkillsOpen = false,
   isConstructionOpen = false,
+  isTerrainOpen = false,
   zoom = 1,
   onZoomIn,
   onZoomOut,
 }: Props) {
+  const [terrainToolActive, setTerrainToolActive] = useState(() => !!(window as any).__TERRAIN_EDIT_ACTIVE__);
+  useEffect(() => {
+    const onMode = (e: Event) => {
+      const detail = (e as CustomEvent<{ mode: string | null }>).detail;
+      setTerrainToolActive(!!detail?.mode);
+    };
+    const onCancel = () => setTerrainToolActive(false);
+    window.addEventListener("phaser-terrain-mode-changed" as any, onMode as EventListener);
+    window.addEventListener("phaser-terrain-cancelled" as any, onCancel as EventListener);
+    return () => {
+      window.removeEventListener("phaser-terrain-mode-changed" as any, onMode as EventListener);
+      window.removeEventListener("phaser-terrain-cancelled" as any, onCancel as EventListener);
+    };
+  }, []);
+  const isTerrainActive = isTerrainOpen || terrainToolActive;
   const { leftButtons, rightButtons, dispatchAction } = useNavbar({
     onToggleCharacter,
     onOpenSettings,
@@ -144,6 +164,7 @@ export function Navbar({
     onToggleMissions,
     onToggleSkills,
     onToggleConstruction,
+    onToggleTerrain,
     isCharacterOpen,
     isInventoryOpen,
     isSettingsOpen,
@@ -153,6 +174,7 @@ export function Navbar({
     isMissionsOpen,
     isSkillsOpen,
     isConstructionOpen,
+    isTerrainOpen,
   });
 
   return (
@@ -208,7 +230,7 @@ export function Navbar({
         ))}
       </div>
 
-      {/* Centro - Construcción y Habilidades (mismo tamaño que demás botones) */}
+      {/* Centro - Construcción, Terreno y Habilidades (mismo tamaño que demás botones) */}
       <div style={{ display: "flex", justifyContent: "center", flex: "0 0 auto", gap: 5 }}>
         <HoverBtn
           id="construction"
@@ -218,6 +240,15 @@ export function Navbar({
           activeColor="#fff"
           activeBorder="#3a9a3e"
           onClick={() => dispatchAction("construction")}
+        />
+        <HoverBtn
+          id="terreno"
+          label={terrainToolActive ? `Terreno [${(window as any).__TERRAIN_EDIT_MODE__ === "excavar" ? "Excavar" : "Aumentar"}]` : "Terreno"}
+          active={isTerrainActive}
+          activeBg={terrainToolActive ? "#3e2723" : "#2a1a12"}
+          activeColor={terrainToolActive ? "#ffcc80" : "#ffab40"}
+          activeBorder={terrainToolActive ? "#ff6f00" : "#6d4c41"}
+          onClick={() => dispatchAction("terreno")}
         />
         <HoverBtn
           id="habilidades"

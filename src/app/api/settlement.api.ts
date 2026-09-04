@@ -13,6 +13,8 @@ export interface SettlementDto {
   currentYear: number;
   season: string;
   weather: string;
+  worldSeed?: string | null;
+  worldState?: any | null;
   survivors: any[];
   buildings: any[];
   inventory: any[];
@@ -29,14 +31,28 @@ export async function fetchSettlementsByOwner(ownerId: string): Promise<Settleme
   return data;
 }
 
-export async function createSettlement(payload: { name: string; ownerId: string; tier?: string }) {
-  const { data } = await api.post('/settlements', payload);
+export async function createSettlement(payload: { name: string; ownerId: string; tier?: string; worldSeed?: string; worldState?: any }) {
+  const { data } = await api.post<SettlementDto>('/settlements', payload);
+  return data;
+}
+
+export async function updateWorldState(id: string, worldState: any): Promise<SettlementDto> {
+  const { data } = await api.patch<SettlementDto>(`/settlements/${id}/world-state`, { worldState });
   return data;
 }
 
 export async function patchPriorities(id: string, priorities: { foodPriority: number; defensePriority: number; productionPriority: number }) {
   const { data } = await api.patch(`/settlements/${id}/priorities`, priorities);
   return data;
+}
+
+export async function renameSettlement(id: string, name: string): Promise<SettlementDto> {
+  const { data } = await api.patch<SettlementDto>(`/settlements/${id}/rename`, { name });
+  return data;
+}
+
+export async function deleteSettlement(id: string): Promise<void> {
+  await api.delete(`/settlements/${id}`);
 }
 
 export async function fetchChunk(x: number, y: number, signal?: AbortSignal) {

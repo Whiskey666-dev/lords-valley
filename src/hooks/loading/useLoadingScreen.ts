@@ -52,17 +52,39 @@ export function useLoadingScreen() {
 
     window.addEventListener("lords-loading-progress" as any, onProgress as EventListener);
 
-    // Timeout de seguridad: asegura que la barra progrese fluidamente incluso en conexiones rápidas o lentas
+    // Fallback fluido: avanza +5 cada 200ms hasta 90 (cubre preloader lento)
     const fallbackTimer = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 90) return prev;
-        return prev + 5;
+        const next = prev + 5;
+        // log para debug si se queda atascado
+        if (next % 20 === 0) console.debug("[LoadingScreen] fallback", next);
+        return next;
       });
     }, 200);
+
+    // Safety net: si Phaser se cuelga (ej. asset faltante), forzar 100 tras 7s para no quedarse en 10%
+    const safetyTimeout = setTimeout(() => {
+      setProgress((prev) => {
+        if (prev < 100) {
+          console.warn("[LoadingScreen] safety timeout: forzando 100% (prev", prev, ")");
+          setStep("Finalizando carga...");
+          return 100;
+        }
+        return prev;
+      });
+    }, 7000);
+
+    // segundo safety por si el primero falla por remount
+    const safety2 = setTimeout(() => {
+      setProgress((prev) => (prev < 100 ? 100 : prev));
+    }, 10000);
 
     return () => {
       window.removeEventListener("lords-loading-progress" as any, onProgress as EventListener);
       clearInterval(fallbackTimer);
+      clearTimeout(safetyTimeout);
+      clearTimeout(safety2);
     };
   }, []);
 

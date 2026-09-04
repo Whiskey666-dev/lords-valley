@@ -2,8 +2,11 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { startLaunchGame } from "../../game/main";
 import { getBinding, isRebindingActive, isConsoleOpenActive } from "../../ui/input/KeyBindings";
 import { useGameStore } from "../../app/store/useGameStore";
-import { fetchSettlementsByOwner } from "../../app/api/settlement.api";
 import { fetchPlayer } from "../../app/api/player.api";
+import { setWorldSeed, clearTerrainCache, isWaterTileFast, isTreeTile, getMineralTypeFast } from "../../game/world/Terrain";
+import { terrainHeightManager } from "../../game/world/TerrainHeight";
+import { farmPlotManager } from "../../game/farming/FarmPlotManager";
+import { collisionMatrix } from "../../game/world/CollisionMatrix";
 import { type NpcPanelData } from "../character/useNpcPanel";
 import type { DeadDragonPanelData } from "../../ui/character/DeadDragonPanel";
 import type { FarmPlotStatus } from "../../game/farming/FarmPlotManager";
@@ -24,6 +27,8 @@ export function useAppController() {
   const [showMissions, setShowMissions] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
   const [showConstruction, setShowConstruction] = useState(false);
+  const [showTerrain, setShowTerrain] = useState(false);
+  const [showStartMenu, setShowStartMenu] = useState(true);
   const [isAuthed, setIsAuthed] = useState(() => !!localStorage.getItem("access_token"));
 
   const survivors = useGameStore((s) => s.survivors);
@@ -77,6 +82,86 @@ export function useAppController() {
     setShowConstruction(prev => !prev);
   }, []);
 
+  const handleToggleTerrain = useCallback(() => {
+    setShowTerrain(prev => !prev);
+  }, []);
+
+  const handleEnterGame = useCallback(async (settlementId: string) => {
+    localStorage.setItem("settlementId", settlementId);
+    // Configurar mundo por settlement ANTES de lanzar Phaser
+    try {
+      // Cambiar managers a este settlement (limpia heights/plots del anterior)
+      terrainHeightManager.setActiveSettlementId(settlementId);
+      farmPlotManager.setActiveSettlementId(settlementId);
+
+      // Intentar obtener worldSeed/worldState del backend
+      const { fetchSettlement: fetchSett } = await import("../../app/api/settlement.api");
+      const settlement: any = await fetchSett(settlementId).catch(() => null);
+      const seed = settlement?.worldSeed || `seed_${settlementId.slice(-8)}_${Date.now().toString(36)}`;
+      setWorldSeed(seed);
+      clearTerrainCache();
+      // Reconstruir colisiones para la nueva semilla (StaticGroundLayer y ChunkRenderer lo harán de nuevo, pero aseguramos)
+      try {
+        collisionMatrix.buildFromTerrain(isWaterTileFast as any, getMineralTypeFast as any, isTreeTile as any);
+      } catch {}
+
+      // Si el settlement trae worldState con heights/plots, hidratar managers
+      if (settlement?.worldState) {
+        const ws = settlement.worldState;
+        if (Array.isArray(ws.terrainHeights) && ws.terrainHeights.length === 36864) {
+          // evitar re-guardar a backend al importar (desactivar debounce temporal)
+          terrainHeightManager.importArray(ws.terrainHeights);
+        }
+        if (Array.isArray(ws.farmPlots)) {
+          const key = `lords_valley_farm_plots_${settlementId}`;
+          localStorage.setItem(key, JSON.stringify(ws.farmPlots));
+          // forzar recarga del manager
+          farmPlotManager.setActiveSettlementId(null as any);
+          farmPlotManager.setActiveSettlementId(settlementId);
+        }
+      }
+
+      // También asegurar que el store tenga el settlement
+      fetchSettlement(settlementId).catch(() => console.warn("[App] fetchSettlement failed", settlementId));
+    } catch (e) {
+      console.warn("[App] handleEnterGame worldSeed fail", e);
+      // fallback: usar id como seed
+      setWorldSeed(settlementId);
+      clearTerrainCache();
+      fetchSettlement(settlementId).catch(() => {});
+    }
+    setShowStartMenu(false);
+  }, [fetchSettlement]);
+
+  const handleReturnToStart = useCallback(() => {
+    // Cerrar todos los paneles de juego antes de volver al inicio
+    setShowCharacter(false);
+    setSelectedNPC(null);
+    setSelectedDeadDragon(null);
+    setSelectedFarmPlot(null);
+    setShowPlayerInventory(false);
+    setShowSettings(false);
+    setShowFollowers(false);
+    setShowBuildings(false);
+    setShowMap(false);
+    setShowMissions(false);
+    setShowSkills(false);
+    setShowConstruction(false);
+    setShowTerrain(false);
+    // Destruir Phaser y mostrar inicio
+    if (gameRef.current) {
+      try { gameRef.current.destroy(true); } catch {}
+      gameRef.current = null;
+    }
+    useGameStore.getState().resetState();
+    setShowStartMenu(true);
+  }, []);
+
+  // Cuando cambia auth, mostrar inicio si está autenticado
+  useEffect(() => {
+    if (isAuthed) setShowStartMenu(true);
+  }, [isAuthed]);
+
   // Sincronización cross-tab (localStorage / evento auth-changed)
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -93,11 +178,10 @@ export function useAppController() {
     };
   }, []);
 
-  // Hidratar settlement y datos del jugador autenticado
+  // Hidratar datos del jugador autenticado (sin auto-seleccionar settlement)
   useEffect(() => {
     if (!isAuthed) return;
     const load = async () => {
-      let sid = localStorage.getItem("settlementId");
       const playerRaw = localStorage.getItem("player");
       const parsedPlayer = playerRaw ? JSON.parse(playerRaw) : null;
       const playerId = localStorage.getItem("playerId") || (parsedPlayer ? parsedPlayer.id : null);
@@ -157,25 +241,9 @@ export function useAppController() {
           edad: 28,
         } as NpcPanelData);
       }
-
-      if (!sid && playerId) {
-        try {
-          const list = await fetchSettlementsByOwner(playerId);
-          if (list.length > 0) {
-            sid = list[0].id;
-            localStorage.setItem("settlementId", sid);
-          }
-        } catch (e) {
-          console.warn("[App] fetchSettlements error", e);
-        }
-      }
-      if (!sid) sid = import.meta.env.VITE_SETTLEMENT_ID || null;
-      if (sid) {
-        fetchSettlement(sid).catch(() => console.warn("[App] fetchSettlement failed", sid));
-      }
     };
     load();
-  }, [isAuthed, fetchSettlement]);
+  }, [isAuthed]);
 
   // Sincronización de selectedId de Zustand a selectedNPC
   useEffect(() => {
@@ -198,32 +266,58 @@ export function useAppController() {
     }
   }, [selectedId, survivors]);
 
-  // Ciclo de vida de Phaser: se inicializa UNA SOLA VEZ cuando isAuthed es true
+  // Ciclo de vida de Phaser: solo cuando está autenticado Y no está en menú de inicio
   useEffect(() => {
-    if (!isAuthed) return;
-    if (!gameRef.current) {
-      gameRef.current = startLaunchGame();
-      setTimeout(() => {
-        const container = document.getElementById("game-container");
-        const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
-        if (container && canvas) {
-          container.style.position = "relative";
-          canvas.style.position = "absolute";
-          canvas.style.left = "50%";
-          canvas.style.top = "50%";
-          canvas.style.transform = "translate(-50%, -50%)";
-          canvas.style.margin = "0";
+    if (!isAuthed || showStartMenu) return;
+
+    let cancelled = false;
+    let retryTimer: number | null = null;
+
+    const launch = () => {
+      if (cancelled) return;
+      const container = document.getElementById("game-container");
+      if (!container) {
+        // DOM aún no pintado (React acaba de cambiar showStartMenu) -> reintentar
+        retryTimer = window.setTimeout(launch, 50);
+        return;
+      }
+      if (!gameRef.current) {
+        try {
+          window.dispatchEvent(new CustomEvent("lords-loading-progress", { detail: { progress: 10, step: "Iniciando motor de juego..." } }));
+          gameRef.current = startLaunchGame();
+          console.log("[useAppController] Phaser Game lanzado");
+        } catch (e) {
+          console.error("[useAppController] Error lanzando Phaser, reintentando", e);
+          retryTimer = window.setTimeout(launch, 300);
+          return;
         }
-      }, 200);
-    }
+        setTimeout(() => {
+          const c = document.getElementById("game-container");
+          const canvas = c?.querySelector("canvas") as HTMLCanvasElement | null;
+          if (c && canvas) {
+            c.style.position = "relative";
+            canvas.style.position = "absolute";
+            canvas.style.left = "50%";
+            canvas.style.top = "50%";
+            canvas.style.transform = "translate(-50%, -50%)";
+            canvas.style.margin = "0";
+          }
+        }, 200);
+      }
+    };
+
+    // pequeño defer para asegurar que React haya pintado #game-container
+    retryTimer = window.setTimeout(launch, 60);
 
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       if (gameRef.current) {
-        gameRef.current.destroy(true);
+        try { gameRef.current.destroy(true); } catch {}
         gameRef.current = null;
       }
     };
-  }, [isAuthed]);
+  }, [isAuthed, showStartMenu]);
 
   // Suscripciones de eventos de ventana (UI/Phaser bridge)
   useEffect(() => {
@@ -282,6 +376,7 @@ export function useAppController() {
     window.addEventListener("phaser-action-missions", handleToggleMissions);
     window.addEventListener("phaser-action-habilidades", handleToggleSkills);
     window.addEventListener("phaser-action-construction", handleToggleConstruction);
+    window.addEventListener("phaser-action-terreno", handleToggleTerrain);
     window.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
@@ -300,9 +395,10 @@ export function useAppController() {
       window.removeEventListener("phaser-action-missions", handleToggleMissions);
       window.removeEventListener("phaser-action-habilidades", handleToggleSkills);
       window.removeEventListener("phaser-action-construction", handleToggleConstruction);
+      window.removeEventListener("phaser-action-terreno", handleToggleTerrain);
       window.removeEventListener("wheel", handleWheel);
     };
-  }, [handleToggleCharacter, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills, handleToggleConstruction]);
+  }, [handleToggleCharacter, handleToggleInventory, handleToggleSettings, handleToggleBuildings, handleToggleMap, handleToggleMissions, handleToggleSkills, handleToggleConstruction, handleToggleTerrain]);
 
   // Atajo de teclado global (Personaje + Inventario + Misiones)
   useEffect(() => {
@@ -358,6 +454,10 @@ export function useAppController() {
   return {
     isAuthed,
     setIsAuthed,
+    showStartMenu,
+    setShowStartMenu,
+    handleEnterGame,
+    handleReturnToStart,
     showCharacter,
     characterData,
     handleToggleCharacter,
@@ -395,6 +495,9 @@ export function useAppController() {
     showConstruction,
     setShowConstruction,
     handleToggleConstruction,
+    showTerrain,
+    setShowTerrain,
+    handleToggleTerrain,
     zoom,
     handleZoomIn,
     handleZoomOut,

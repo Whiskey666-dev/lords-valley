@@ -6,6 +6,8 @@ import { AccountSettingsTab } from "./components/AccountSettingsTab";
 
 interface Props {
   onClose: () => void;
+  hideInicio?: boolean;
+  onGoToStart?: () => void;
 }
 
 const btnStyle: React.CSSProperties = {
@@ -24,7 +26,7 @@ const btnStyle: React.CSSProperties = {
   border: '1px solid #2a2a2a',
 };
 
-export function SettingsPanel({ onClose }: Props) {
+export function SettingsPanel({ onClose, hideInicio, onGoToStart }: Props) {
   const {
     category,
     setCategory,
@@ -40,7 +42,7 @@ export function SettingsPanel({ onClose }: Props) {
     setParticulas,
     categories,
     currentCategory,
-  } = useSettingsPanel(onClose);
+  } = useSettingsPanel(onClose, hideInicio);
 
   return (
     <div style={{
@@ -112,12 +114,18 @@ export function SettingsPanel({ onClose }: Props) {
 
           {category === "cuenta" && <AccountSettingsTab />}
 
-          {category === "inicio" && (
+          {category === "inicio" && !hideInicio && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <p style={{ fontSize: 12, color: '#888', margin: 0, lineHeight: 1.5 }}>
-                Vuelve al menú principal del juego. (Disponible próximamente)
+                Vuelve al menú principal. Tu partida actual quedará guardada y podrás continuar después.
               </p>
-              <button disabled style={{ width: '100%', padding: 12, borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#222', color: '#666', border: '1px solid #333', cursor: 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (onGoToStart) onGoToStart();
+                  else onClose();
+                }}
+                style={{ width: '100%', padding: 12, borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#1e3322', color: '#8cf', border: '1px solid #2e7d32', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
                 🏠 Ir al menú de inicio
               </button>
             </div>

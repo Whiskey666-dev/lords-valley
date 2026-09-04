@@ -45,6 +45,59 @@ export function noise(cx: number, cy: number, x: number, y: number, seed = 1337)
   return s - Math.floor(s);
 }
 
+// --- Semilla de mundo y RNG determinista ---
+let currentWorldSeed: string = "default_seed";
+let currentSeedHash: number = 1337;
+
+function hashString(str: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function createSeededRNG(seedStr: string, salt: string = ""): () => number {
+  let h = hashString(seedStr + salt);
+  if (h === 0) h = 1;
+  return () => {
+    // xorshift32
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+export function setWorldSeed(seed: string | null | undefined): void {
+  const newSeed = (seed && seed.trim()) ? seed.trim() : "default_seed";
+  if (newSeed === currentWorldSeed) return;
+  currentWorldSeed = newSeed;
+  currentSeedHash = hashString(newSeed);
+  // invalidar caches para regenerar con nueva semilla
+  cachedWaterTiles = null;
+  cachedWaterLinear = null;
+  cachedMineralTiles = null;
+  cachedMineralLinear = null;
+  // limpiar también matriz de colisión si existe (se reconstruirá en StaticGroundLayer/ChunkRenderer)
+}
+
+export function getWorldSeed(): string {
+  return currentWorldSeed;
+}
+
+export function getSeedHash(): number {
+  return currentSeedHash;
+}
+
+export function clearTerrainCache(): void {
+  cachedWaterTiles = null;
+  cachedWaterLinear = null;
+  cachedMineralTiles = null;
+  cachedMineralLinear = null;
+}
+
 // --- Agua a nivel de TILE pequeño (32px, tamaño personaje) ---
 // Ancho río 5-15 tiles, serpenteante, contiguo, a veces lago o sin agua
 let cachedWaterTiles: Set<string> | null = null;
@@ -55,8 +108,9 @@ function generateWaterTiles(): Set<string> {
   if (cachedWaterTiles) return cachedWaterTiles;
   const W = WORLD_TILES; // 192
   const water = new Set<string>();
+  const rng = createSeededRNG(currentWorldSeed, ":water");
 
-  const roll = Math.random();
+  const roll = rng();
   if (roll < 0.15) {
     cachedWaterType = 'none';
     cachedWaterTiles = water;
@@ -69,14 +123,14 @@ function generateWaterTiles(): Set<string> {
 
   if (cachedWaterType === 'lake') {
     // Lago: blob irregular 5-15 tiles de ancho (diámetro), contiguo
-    const radius = 5 + Math.floor(Math.random() * 11); // 5-15 tiles de radio => diámetro 10-30
-    const cx = 30 + Math.floor(Math.random() * (W - 60));
-    const cy = 30 + Math.floor(Math.random() * (W - 60));
+    const radius = 5 + Math.floor(rng() * 11); // 5-15 tiles de radio => diámetro 10-30
+    const cx = 30 + Math.floor(rng() * (W - 60));
+    const cy = 30 + Math.floor(rng() * (W - 60));
     for (let y = 0; y < W; y++) {
       for (let x = 0; x < W; x++) {
         const dx = x - cx, dy = y - cy;
         const dist = Math.hypot(dx, dy);
-        const edgeNoise = (Math.random() - 0.5) * 4;
+        const edgeNoise = (rng() - 0.5) * 4;
         if (dist < radius + edgeNoise) water.add(`${x}:${y}`);
       }
     }
@@ -86,66 +140,66 @@ function generateWaterTiles(): Set<string> {
   }
 
   // Río serpenteante de ancho 5-15 tiles, cruza de extremo a extremo
-  const horizontal = Math.random() < 0.6;
+  const horizontal = rng() < 0.6;
   // Ancho inicial 5-15, variará ±1 por segmento
-  let width = 5 + Math.floor(Math.random() * 11); // 5-15
+  let width = 5 + Math.floor(rng() * 11); // 5-15
   const centerline: [number, number][] = [];
 
   if (horizontal) {
     let x = 0;
-    let y = 60 + Math.floor(Math.random() * 72); // 60-132 evita borde exacto
+    let y = 60 + Math.floor(rng() * 72); // 60-132 evita borde exacto
     centerline.push([x, y]);
     while (x < W - 1) {
-      const r = Math.random();
+      const r = rng();
       // Meandro: 50% este, 25% norte, 25% sur
       if (r < 0.5 && x < W - 1) x += 1;
       else if (r < 0.75) y = Math.max(2, Math.min(W - 3, y + 1));
       else y = Math.max(2, Math.min(W - 3, y - 1));
       centerline.push([x, y]);
       // Variación de ancho ±1
-      if (Math.random() < 0.25) {
-        width = Math.max(5, Math.min(15, width + (Math.random() < 0.5 ? 1 : -1)));
+      if (rng() < 0.25) {
+        width = Math.max(5, Math.min(15, width + (rng() < 0.5 ? 1 : -1)));
       }
       if (x === W - 1) break;
     }
     // Expande ancho perpendicular (vertical)
     for (const [cx, cy] of centerline) {
-      const w = Math.max(5, Math.min(15, width + Math.floor((Math.random() - 0.5) * 2)));
+      const w = Math.max(5, Math.min(15, width + Math.floor((rng() - 0.5) * 2)));
       const h = Math.floor(w / 2);
       for (let dy = -h; dy <= h; dy++) {
         const ny = cy + dy;
         if (ny >= 0 && ny < W) water.add(`${cx}:${ny}`);
       }
       // Añade irregularidad de borde: 20% de tiles extra adyacentes
-      if (Math.random() < 0.2) {
-        const ny = cy + (Math.random() < 0.5 ? h + 1 : -h - 1);
+      if (rng() < 0.2) {
+        const ny = cy + (rng() < 0.5 ? h + 1 : -h - 1);
         if (ny >= 0 && ny < W) water.add(`${cx}:${ny}`);
       }
     }
   } else {
-    let x = 60 + Math.floor(Math.random() * 72);
+    let x = 60 + Math.floor(rng() * 72);
     let y = 0;
     centerline.push([x, y]);
     while (y < W - 1) {
-      const r = Math.random();
+      const r = rng();
       if (r < 0.5 && y < W - 1) y += 1;
       else if (r < 0.75) x = Math.max(2, Math.min(W - 3, x + 1));
       else x = Math.max(2, Math.min(W - 3, x - 1));
       centerline.push([x, y]);
-      if (Math.random() < 0.25) {
-        width = Math.max(5, Math.min(15, width + (Math.random() < 0.5 ? 1 : -1)));
+      if (rng() < 0.25) {
+        width = Math.max(5, Math.min(15, width + (rng() < 0.5 ? 1 : -1)));
       }
       if (y === W - 1) break;
     }
     for (const [cx, cy] of centerline) {
-      const w = Math.max(5, Math.min(15, width + Math.floor((Math.random() - 0.5) * 2)));
+      const w = Math.max(5, Math.min(15, width + Math.floor((rng() - 0.5) * 2)));
       const h = Math.floor(w / 2);
       for (let dx = -h; dx <= h; dx++) {
         const nx = cx + dx;
         if (nx >= 0 && nx < W) water.add(`${nx}:${cy}`);
       }
-      if (Math.random() < 0.2) {
-        const nx = cx + (Math.random() < 0.5 ? h + 1 : -h - 1);
+      if (rng() < 0.2) {
+        const nx = cx + (rng() < 0.5 ? h + 1 : -h - 1);
         if (nx >= 0 && nx < W) water.add(`${nx}:${cy}`);
       }
     }
@@ -246,6 +300,7 @@ function generateMineralTiles(): Map<string, string> {
   const totalTiles = W * W;
   const mineralMap = new Map<string, string>();
   const occupied = new Set<string>(getWaterTiles()); // no spawnear donde hay agua
+  const rng = createSeededRNG(currentWorldSeed, ":mineral");
 
   // Genera por tipo: rarity es límite máximo relativo a total de cuadros pequeños (escalado 0.18 para que 85% nominal sea ~15% real y el mapa siga jugable)
   const MINERAL_SCALE = 0.18;
@@ -257,12 +312,12 @@ function generateMineralTiles(): Map<string, string> {
     while (placed < targetTiles && attempts < targetTiles * 3) {
       attempts++;
       // Tamaño veta variable
-      const veinSize = cfg.veinMin + Math.floor(Math.random() * (cfg.veinMax - cfg.veinMin + 1));
+      const veinSize = cfg.veinMin + Math.floor(rng() * (cfg.veinMax - cfg.veinMin + 1));
       // Centro aleatorio no en agua y no ocupado
       let cx: number, cy: number, tries = 0;
       do {
-        cx = Math.floor(Math.random() * W);
-        cy = Math.floor(Math.random() * W);
+        cx = Math.floor(rng() * W);
+        cy = Math.floor(rng() * W);
         tries++;
       } while ((occupied.has(`${cx}:${cy}`) || isWaterTile(cx, cy)) && tries < 20);
       if (occupied.has(`${cx}:${cy}`) || isWaterTile(cx, cy)) continue;
@@ -273,9 +328,9 @@ function generateMineralTiles(): Map<string, string> {
       let veinAttempts = 0;
       while (vein.size < veinSize && veinAttempts < veinSize * 5) {
         const arr = Array.from(vein);
-        const [rx, ry] = arr[Math.floor(Math.random() * arr.length)].split(':').map(Number);
+        const [rx, ry] = arr[Math.floor(rng() * arr.length)].split(':').map(Number);
         const dirs: [number, number][] = [[1,0],[-1,0],[0,1],[0,-1]];
-        const [dx, dy] = dirs[Math.floor(Math.random() * 4)];
+        const [dx, dy] = dirs[Math.floor(rng() * 4)];
         const nx = rx + dx, ny = ry + dy;
         const key = `${nx}:${ny}`;
         if (nx < 0 || nx >= W || ny < 0 || ny >= W) { veinAttempts++; continue; }

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { api } from "../../app/api/client";
-import { fetchSettlementsByOwner, createSettlement } from "../../app/api/settlement.api";
 
 export function useAuth(onAuthenticated: () => void) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -24,20 +23,9 @@ export function useAuth(onAuthenticated: () => void) {
       localStorage.setItem("access_token", token);
       localStorage.setItem("player", JSON.stringify(player));
       localStorage.setItem("playerId", player.id);
-
-      // Obtener o crear settlement para el jugador
-      const settlements = await fetchSettlementsByOwner(player.id).catch(() => []);
-      let settlementId: string | null = settlements[0]?.id ?? null;
-      if (!settlementId) {
-        const settlement = await createSettlement({
-          name: `Valle de ${player.username}`,
-          ownerId: player.id,
-        });
-        settlementId = settlement.id;
-      }
-      if (settlementId) {
-        localStorage.setItem("settlementId", settlementId);
-      }
+      // No auto-crear settlement: el StartScreen gestionará Nueva/Continuar Partida
+      // Limpiar settlementId previo si existía de otro usuario
+      // (se mantendrá hasta que el jugador elija partida en StartScreen)
 
       window.dispatchEvent(new CustomEvent("auth-changed"));
       onAuthenticated();

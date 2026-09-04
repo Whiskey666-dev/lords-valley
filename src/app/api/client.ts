@@ -3,8 +3,8 @@ import axios from 'axios';
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 8000,
-  timeoutErrorMessage: 'Timeout de red — reintentando',
+  timeout: 15000,
+  timeoutErrorMessage: 'Timeout de red — backend no responde (15s)',
 });
 
 api.interceptors.response.use(

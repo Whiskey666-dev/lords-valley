@@ -15,19 +15,47 @@ export interface FarmPlotStatus extends FarmPlotData {
   growth: CropGrowthStatus | null;
 }
 
-const STORAGE_KEY = "lords_valley_farm_plots_v1";
+const STORAGE_BASE = "lords_valley_farm_plots";
+const LEGACY_KEY = "lords_valley_farm_plots_v1";
 
 class FarmPlotManagerClass {
   private plots: Map<string, FarmPlotData> = new Map();
   private listeners: Set<(plots: FarmPlotData[]) => void> = new Set();
+  private activeSettlementId: string | null = null;
+  private saveDebounceTimer: number | null = null;
 
   constructor() {
+    const sid = localStorage.getItem("settlementId");
+    this.activeSettlementId = sid && sid.trim() ? sid.trim() : null;
     this.loadFromStorage();
+    window.addEventListener("storage", (e) => {
+      if (e.key === "settlementId") {
+        this.setActiveSettlementId(e.newValue);
+      }
+    });
+  }
+
+  private storageKey(): string {
+    return this.activeSettlementId ? `${STORAGE_BASE}_${this.activeSettlementId}` : LEGACY_KEY;
+  }
+
+  setActiveSettlementId(id: string | null): void {
+    const newId = id && id.trim() ? id.trim() : null;
+    if (newId === this.activeSettlementId) return;
+    this.activeSettlementId = newId;
+    this.plots.clear();
+    this.loadFromStorage();
+    this.notifyListeners();
+    console.log(`[FarmPlotManager] switched to settlement ${newId || "legacy"} plots=${this.plots.size}`);
+  }
+
+  getActiveSettlementId(): string | null {
+    return this.activeSettlementId;
   }
 
   private loadFromStorage(): void {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(this.storageKey());
       if (raw) {
         const list: FarmPlotData[] = JSON.parse(raw);
         if (Array.isArray(list)) {
@@ -37,6 +65,8 @@ class FarmPlotManagerClass {
             this.plots.set(key, p);
           });
         }
+      } else {
+        this.plots.clear();
       }
     } catch (e) {
       console.warn("[FarmPlotManager] Error loading farm plots from storage", e);
@@ -46,11 +76,53 @@ class FarmPlotManagerClass {
   private saveToStorage(): void {
     try {
       const list = Array.from(this.plots.values());
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      localStorage.setItem(this.storageKey(), JSON.stringify(list));
       this.notifyListeners();
+      this.saveToBackendDebounced(list);
     } catch (e) {
       console.warn("[FarmPlotManager] Error saving farm plots to storage", e);
     }
+  }
+
+  private saveToBackendDebounced(list: FarmPlotData[]): void {
+    if (!this.activeSettlementId) return;
+    if (this.saveDebounceTimer) window.clearTimeout(this.saveDebounceTimer);
+    this.saveDebounceTimer = window.setTimeout(() => {
+      this.saveToBackend(list);
+    }, 1500);
+  }
+
+  private async saveToBackend(list: FarmPlotData[]): Promise<void> {
+    const sid = this.activeSettlementId;
+    if (!sid) return;
+    try {
+      const { api } = await import("../../app/api/client");
+      const { fetchSettlement } = await import("../../app/api/settlement.api");
+      const settlement: any = await fetchSettlement(sid).catch(() => null);
+      const prevState = settlement?.worldState || {};
+      const newState = { ...prevState, farmPlots: list };
+      await api.patch(`/settlements/${sid}/world-state`, { worldState: newState }).catch(() => {});
+    } catch {}
+  }
+
+  async loadFromBackend(): Promise<void> {
+    const sid = this.activeSettlementId;
+    if (!sid) return;
+    try {
+      const { fetchSettlement } = await import("../../app/api/settlement.api");
+      const settlement: any = await fetchSettlement(sid);
+      const plots = settlement?.worldState?.farmPlots;
+      if (Array.isArray(plots)) {
+        this.plots.clear();
+        plots.forEach((p: FarmPlotData) => {
+          const key = `${p.tileX}:${p.tileY}`;
+          this.plots.set(key, p);
+        });
+        // persistir localmente para cache
+        localStorage.setItem(this.storageKey(), JSON.stringify(Array.from(this.plots.values())));
+        this.notifyListeners();
+      }
+    } catch {}
   }
 
   public subscribe(cb: (plots: FarmPlotData[]) => void): () => void {

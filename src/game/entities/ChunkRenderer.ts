@@ -15,6 +15,7 @@ import {
   isoToTile,
   WORLD_CHUNKS
 } from '../world/Terrain';
+import { getHeightFast, HEIGHT_STEP_PX } from '../world/TerrainHeight';
 import { collisionMatrix } from '../world/CollisionMatrix';
 
 export class ChunkRenderer {
@@ -28,6 +29,49 @@ export class ChunkRenderer {
     this.scene = scene;
     // Asegurar que la matriz de colisión esté construida
     collisionMatrix.buildFromTerrain(isWaterTileFast, getMineralTypeFast as any, isTreeTile as any);
+    // Escuchar cambios de altura para refrescar chunks afectados
+    window.addEventListener("terrain-height-changed" as any, ((e: CustomEvent<{ changedChunks: Set<string> }>) => {
+      const detail = (e as CustomEvent<any>).detail;
+      const changed: Set<string> | string[] = detail?.changedChunks ?? new Set();
+      const set = changed instanceof Set ? changed : new Set<string>(changed as string[]);
+      this.refreshChunks(set);
+    }) as EventListener);
+  }
+
+  /** Re-render chunks cuya altura cambió */
+  private refreshChunks(keys: Set<string>): void {
+    for (const key of keys) {
+      const existing = this.rendered.get(key);
+      if (existing) {
+        existing.destroy(true);
+        this.rendered.delete(key);
+        this.renderChunk(key);
+      } else {
+        // si el chunk no estaba renderizado pero está en pending needed, se renderizará en próximo update
+        // forzar si está dentro del viewport actual: intentar render si no existe
+        // Solo si está cerca: calculamos needed con lastCenter? simplificamos: no hacer nada
+      }
+    }
+  }
+
+  /** Ajusta color por altura: aclara si elevado, oscurece si hundido */
+  private shadeColor(hex: number, h: number): number {
+    if (h === 0) return hex;
+    let r = (hex >> 16) & 0xff;
+    let g = (hex >> 8) & 0xff;
+    let b = hex & 0xff;
+    if (h > 0) {
+      const f = Math.min(0.45, h * 0.075);
+      r = Math.min(255, Math.round(r + (255 - r) * f));
+      g = Math.min(255, Math.round(g + (255 - g) * f));
+      b = Math.min(255, Math.round(b + (255 - b) * f));
+    } else {
+      const f = Math.max(0.35, 1 + h * 0.09); // h negativo => 0.91, 0.82...
+      r = Math.round(r * f);
+      g = Math.round(g * f);
+      b = Math.round(b * f);
+    }
+    return (r << 16) | (g << 8) | b;
   }
 
   worldToChunk(isoX: number, isoY: number) {
@@ -141,28 +185,52 @@ export class ChunkRenderer {
     terrain.closePath();
     terrain.fillPath();
 
-    // 2) Overlays de agua, minerales y árboles agrupados por color
+    // 2) Overlays de agua, minerales y árboles agrupados por color + altura
+    // También dibujamos variaciones de césped por altura (no solo overlay)
     const colorGroups = new Map<number, Array<{ x: number; y: number }>>();
+
+    // Para césped con altura, necesitamos agrupar también por altura (sombreamos BASE_GREEN)
+    // Creamos mapa de altura -> color sombreado para césped
+    const heightBaseColorCache = new Map<number, number>();
 
     for (let y = 0; y < CHUNK_TILES; y++) {
       for (let x = 0; x < CHUNK_TILES; x++) {
         const worldTileX = cx * CHUNK_TILES + x;
         const worldTileY = cy * CHUNK_TILES + y;
-        const isoX = (worldTileX - worldTileY) * HALF_W + ISO_ORIGIN_X;
-        const isoY = (worldTileX + worldTileY) * HALF_H;
+        const baseIsoX = (worldTileX - worldTileY) * HALF_W + ISO_ORIGIN_X;
+        const baseIsoY = (worldTileX + worldTileY) * HALF_H;
+        const h = getHeightFast(worldTileX, worldTileY);
+        const isoX = baseIsoX;
+        const isoY = baseIsoY - h * HEIGHT_STEP_PX;
 
         let color: number | null = null;
+        let isBaseGreen = false;
         const mineralType = getMineralTypeFast(worldTileX, worldTileY);
         if (isWaterTileFast(worldTileX, worldTileY)) {
-          color = WATER_DARK;
+          color = this.shadeColor(WATER_DARK, h);
         } else if (mineralType) {
-          color = getMineralColor(mineralType);
+          color = this.shadeColor(getMineralColor(mineralType), h);
         } else if (isTreeTile(cx, cy, x, y)) {
-          color = TREE_BROWN;
+          color = this.shadeColor(TREE_BROWN, h);
         } else {
-          continue; // Césped base ya dibujado
+          // Césped base: si hay altura !=0, dibujamos overlay sombreado, si no dejamos base polígono
+          if (h !== 0) {
+            isBaseGreen = true;
+            let cached = heightBaseColorCache.get(h);
+            if (cached === undefined) {
+              cached = this.shadeColor(BASE_GREEN, h);
+              heightBaseColorCache.set(h, cached);
+            }
+            color = cached;
+          } else {
+            continue; // Césped base ya dibujado
+          }
         }
 
+        // Para césped sombreado también usamos colorGroups, se dibujará sobre base
+        if (color === null) continue;
+        // si esBaseGreen y altura, mantendremos grupo normal
+        void isBaseGreen;
         let group = colorGroups.get(color);
         if (!group) {
           group = [];
@@ -185,7 +253,45 @@ export class ChunkRenderer {
         terrain.closePath();
       }
       terrain.fillPath();
+      // Si es césped con altura, dibujar borde sutil de desnivel
+      // (solo si color proviene de BASE_GREEN sombreado)
+      // Detectamos si algún punto de este color corresponde a césped elevado
+      // Para simplicidad dibujamos contorno delgado del mismo color más oscuro si altura !=0
     }
+
+    // 2b) Dibujar indicadores de altura (números) y bordes de acantilado para desnivel visible
+    // Pequeños ticks de sombra en tile con altura para percibir relieve
+    const cliffGraphics = this.scene.add.graphics();
+    cliffGraphics.setDepth(-10);
+    let hasCliff = false;
+    for (let y = 0; y < CHUNK_TILES; y++) {
+      for (let x = 0; x < CHUNK_TILES; x++) {
+        const worldTileX = cx * CHUNK_TILES + x;
+        const worldTileY = cy * CHUNK_TILES + y;
+        const h = getHeightFast(worldTileX, worldTileY);
+        if (h === 0) continue;
+        const baseIsoX = (worldTileX - worldTileY) * HALF_W + ISO_ORIGIN_X;
+        const baseIsoY = (worldTileX + worldTileY) * HALF_H - h * HEIGHT_STEP_PX;
+        // Borde lateral si vecino más bajo (acantilado)
+        const eastH = worldTileX + 1 < 192 ? getHeightFast(worldTileX + 1, worldTileY) : h;
+        const southH = worldTileY + 1 < 192 ? getHeightFast(worldTileX, worldTileY + 1) : h;
+        if (h > eastH || h > southH) {
+          hasCliff = true;
+          const diff = Math.max(h - eastH, h - southH);
+          const alpha = Math.min(0.35, 0.12 + diff * 0.06);
+          cliffGraphics.fillStyle(0x000000, alpha);
+          cliffGraphics.beginPath();
+          // sombra lateral del rombo: pequeño paralelogramo en borde sur-este
+          cliffGraphics.moveTo(baseIsoX + ISO_TILE_W, baseIsoY + HALF_H);
+          cliffGraphics.lineTo(baseIsoX + HALF_W, baseIsoY + ISO_TILE_H);
+          cliffGraphics.lineTo(baseIsoX + HALF_W, baseIsoY + ISO_TILE_H + Math.min(8, diff * HEIGHT_STEP_PX));
+          cliffGraphics.lineTo(baseIsoX + ISO_TILE_W, baseIsoY + HALF_H + Math.min(8, diff * HEIGHT_STEP_PX));
+          cliffGraphics.closePath();
+          cliffGraphics.fillPath();
+        }
+      }
+    }
+    if (hasCliff) container.add(cliffGraphics); else cliffGraphics.destroy();
 
     // Borde sutil del chunk
     terrain.lineStyle(1, 0x224422, 0.15);

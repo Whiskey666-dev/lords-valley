@@ -13,6 +13,8 @@ import { MineralTooltip } from '../ui/hud/MineralTooltip';
 import { MissionsPanel } from '../ui/missions/MissionsPanel';
 import { SkillsPanel } from '../ui/skills/SkillsPanel';
 import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
+import { TerrainPanel } from '../ui/terrain/TerrainPanel';
+import { StartScreen } from '../ui/start/StartScreen';
 import { CropPlantingModal } from '../ui/farming/CropPlantingModal';
 import { FogOverlay } from '../ui/hud/FogOverlay';
 import { LoadingScreen } from '../ui/loading/LoadingScreen';
@@ -22,6 +24,9 @@ function App() {
   const {
     isAuthed,
     setIsAuthed,
+    showStartMenu,
+    handleEnterGame,
+    handleReturnToStart,
     showCharacter,
     characterData,
     handleToggleCharacter,
@@ -47,6 +52,8 @@ function App() {
     handleToggleSkills,
     showConstruction,
     handleToggleConstruction,
+    showTerrain,
+    handleToggleTerrain,
     selectedFarmPlot,
     handleCloseCropPlot,
     zoom,
@@ -56,6 +63,10 @@ function App() {
 
   if (!isAuthed) {
     return <AuthScreen onAuthenticated={() => setIsAuthed(true)} />;
+  }
+
+  if (showStartMenu) {
+    return <StartScreen onEnterGame={handleEnterGame} onLogout={() => setIsAuthed(false)} />;
   }
 
   // Detectar si hay algún panel lateral o modal abierto
@@ -89,6 +100,7 @@ function App() {
         onToggleMissions={handleToggleMissions}
         onToggleSkills={handleToggleSkills}
         onToggleConstruction={handleToggleConstruction}
+        onToggleTerrain={handleToggleTerrain}
         isCharacterOpen={showCharacter}
         isInventoryOpen={showPlayerInventory}
         isSettingsOpen={showSettings}
@@ -98,6 +110,7 @@ function App() {
         isMissionsOpen={showMissions}
         isSkillsOpen={showSkills}
         isConstructionOpen={showConstruction}
+        isTerrainOpen={showTerrain}
       />
 
       {/* MiniMap: oculto mediante CSS cuando hay panel lateral o mapa mundial abierto para 0 coste de montaje */}
@@ -110,7 +123,7 @@ function App() {
 
       <Console />
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} onGoToStart={handleReturnToStart} />}
 
       {/* Panel de Edificios (Gestión & Administración) */}
       {showBuildings && <BuildingsPanel onClose={handleToggleBuildings} />}
@@ -126,6 +139,9 @@ function App() {
 
       {/* Panel de Construcción — 56 edificios 7 categorías + mejoras por capítulo */}
       {showConstruction && <ConstructionPanel onClose={handleToggleConstruction} />}
+
+      {/* Panel de Terreno — Excavar / Aumentar / Tamaño */}
+      {showTerrain && <TerrainPanel onClose={handleToggleTerrain} />}
 
       {/* Modal de Siembra y Cosecha de Parcelas de Cultivo */}
       {selectedFarmPlot && (

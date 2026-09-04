@@ -15,6 +15,7 @@ import { StaticGroundLayer } from "../layers/StaticGroundLayer";
 import { DynamicLayer } from "../layers/DynamicLayer";
 import { ChunkRenderer } from "../entities/ChunkRenderer";
 import { FarmPlacementSystem } from "../systems/FarmPlacementSystem";
+import { TerrainEditSystem } from "../systems/TerrainEditSystem";
 import { savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
@@ -29,6 +30,8 @@ export class MainScene extends Phaser.Scene {
   private staticGround!: StaticGroundLayer;
   private dynamicLayer!: DynamicLayer;
   private farmPlacementSystem!: FarmPlacementSystem;
+  // sistema de terreno es instanciado por side-effect; no necesita lectura directa
+  private terrainEditSystem!: TerrainEditSystem;
   private cameraFollow = true;
   private lastViewportEmit = 0;
   private lastCameraX = 0;
@@ -37,41 +40,53 @@ export class MainScene extends Phaser.Scene {
   constructor() { super("MainScene"); }
 
   create(): void {
-    this.setupWorld();
-    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
-      detail: { progress: 65, step: "Generando animaciones y entidades..." }
-    }));
-    initAllCharacterAnimations(this);
-    this.verifyHumanAnimations();
+    try {
+      this.setupWorld();
+      window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+        detail: { progress: 65, step: "Generando animaciones y entidades..." }
+      }));
+      initAllCharacterAnimations(this);
+      this.verifyHumanAnimations();
 
-    // Inicializar suelo y chunks isométricos
-    this.staticGround = new StaticGroundLayer(this);
-    this.staticGround.bake();
-    this.chunkRenderer = new ChunkRenderer(this);
+      // Inicializar suelo y chunks isométricos
+      this.staticGround = new StaticGroundLayer(this);
+      this.staticGround.bake();
+      this.chunkRenderer = new ChunkRenderer(this);
 
-    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
-      detail: { progress: 80, step: "Generando terreno isométrico y colisiones..." }
-    }));
+      window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+        detail: { progress: 80, step: "Generando terreno isométrico y colisiones..." }
+      }));
 
-    // Capa dinámica para entidades
-    this.dynamicLayer = new DynamicLayer(this);
+      // Capa dinámica para entidades
+      this.dynamicLayer = new DynamicLayer(this);
 
-    this.spawnPlayer();
-    this.setupNpcListeners();
-    this.setupDeadDragonListeners();
-    this.chatSystem = new ChatBubbleSystem(this);
-    this.farmPlacementSystem = new FarmPlacementSystem(this);
+      this.spawnPlayer();
+      this.setupNpcListeners();
+      this.setupDeadDragonListeners();
+      this.chatSystem = new ChatBubbleSystem(this);
+      this.farmPlacementSystem = new FarmPlacementSystem(this);
+      this.terrainEditSystem = new TerrainEditSystem(this);
+      void this.terrainEditSystem;
 
-    setupCamera(this, this.player, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
-    this.setupRTSOverlay();
-    this.setupDebug();
+      setupCamera(this, this.player, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
+      this.setupRTSOverlay();
+      this.setupDebug();
 
-    // Render inicial de chunks alrededor de la cámara
-    this.chunkRenderer.update(this.cameras.main);
-
-    window.dispatchEvent(new CustomEvent("lords-loading-progress", {
-      detail: { progress: 100, step: "¡Bienvenido a Lords Valley!" }
-    }));
+      // Render inicial de chunks alrededor de la cámara
+      this.chunkRenderer.update(this.cameras.main);
+    } catch (e) {
+      console.error("[MainScene] Error en create, forzando fin de carga", e);
+      window.dispatchEvent(new CustomEvent("lords-loading-progress", { detail: { progress: 90, step: "Recuperando carga..." } }));
+    } finally {
+      // Siempre desbloquear la pantalla de carga aunque haya error
+      window.dispatchEvent(new CustomEvent("lords-loading-progress", {
+        detail: { progress: 100, step: "¡Bienvenido a Lords Valley!" }
+      }));
+      // fallback extra por si el evento se pierde por timing
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("lords-loading-progress", { detail: { progress: 100, step: "¡Bienvenido a Lords Valley!" } }));
+      }, 400);
+    }
   }
 
   private setupNpcListeners(): void {

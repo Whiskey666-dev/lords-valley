@@ -99,11 +99,13 @@ export class FarmPlacementSystem {
 
     // Puntero en el mundo para colocación
     this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if ((window as any).__TERRAIN_EDIT_ACTIVE__) return;
       if (!this.isPlacementActive) return;
       this.updateGhostPreview(pointer);
     });
 
     this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if ((window as any).__TERRAIN_EDIT_ACTIVE__) return;
       if (!this.isPlacementActive) return;
 
       // Clic derecho cancela
@@ -318,6 +320,7 @@ export class FarmPlacementSystem {
     });
 
     groundGfx.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if ((window as any).__TERRAIN_EDIT_ACTIVE__) return;
       if (this.isPlacementActive) return;
       if (pointer.rightButtonDown?.()) return;
 
