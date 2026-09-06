@@ -35,7 +35,7 @@ export function StartScreen({ onEnterGame, onLogout }: Props) {
     let cancelled = false;
     const check = async () => {
       try {
-        await api.get("/settlements/owner/__health__", { timeout: 4000 });
+        await api.get("/health", { timeout: 4000 });
         if (!cancelled) setBackendStatus("online");
       } catch (e: any) {
         // si 404 es que backend está online (ruta no existe pero responde)
