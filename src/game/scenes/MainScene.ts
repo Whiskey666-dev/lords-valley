@@ -16,6 +16,7 @@ import { DynamicLayer } from "../layers/DynamicLayer";
 import { ChunkRenderer } from "../entities/ChunkRenderer";
 import { FarmPlacementSystem } from "../systems/FarmPlacementSystem";
 import { TerrainEditSystem } from "../systems/TerrainEditSystem";
+import { TerrainOcclusionSystem } from "../systems/TerrainOcclusionSystem";
 import { savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
@@ -32,6 +33,7 @@ export class MainScene extends Phaser.Scene {
   private farmPlacementSystem!: FarmPlacementSystem;
   // sistema de terreno es instanciado por side-effect; no necesita lectura directa
   private terrainEditSystem!: TerrainEditSystem;
+  private terrainOcclusionSystem!: TerrainOcclusionSystem;
   private cameraFollow = true;
   private lastViewportEmit = 0;
   private lastCameraX = 0;
@@ -67,6 +69,7 @@ export class MainScene extends Phaser.Scene {
       this.farmPlacementSystem = new FarmPlacementSystem(this);
       this.terrainEditSystem = new TerrainEditSystem(this);
       void this.terrainEditSystem;
+      this.terrainOcclusionSystem = new TerrainOcclusionSystem(this);
 
       setupCamera(this, this.player, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
       this.setupRTSOverlay();
@@ -452,6 +455,9 @@ export class MainScene extends Phaser.Scene {
       this.npcs.forEach(n => n.updateEntity());
       this.deadDragons.forEach(d => d.updateEntity());
       this.chatSystem.update(this.player);
+      if (this.terrainOcclusionSystem && this.player) {
+        this.terrainOcclusionSystem.update(this.player);
+      }
       if (this.cameraFollow && this.player) updateCamera(this, this.player);
       if (this.player) (window as any).__PLAYER_POS__ = { x: this.player.x, y: this.player.y };
       const npcPositionsBlocked = this.npcs.filter(n => n.sprite && n.sprite.active).map(n => ({ ...n.getPaqueteUI(), x: n.sprite!.x, y: n.sprite!.y }));
@@ -496,6 +502,9 @@ export class MainScene extends Phaser.Scene {
     (window as any).__DEAD_DRAGON_COUNT__ = this.deadDragons.length;
 
     this.chatSystem.update(this.player);
+    if (this.terrainOcclusionSystem && this.player) {
+      this.terrainOcclusionSystem.update(this.player);
+    }
     if (this.cameraFollow && this.player) {
       updateCamera(this, this.player);
     }

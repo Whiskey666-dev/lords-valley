@@ -7,20 +7,18 @@ import { isGameInputBlocked } from "../ui/input/KeyBindings";
 import { collisionMatrix } from "../game/world/CollisionMatrix";
 import { isoToTile } from "../game/world/Terrain";
 import { getHeightFast, HEIGHT_STEP_PX } from "../game/world/TerrainHeight";
-import { canStepHeight } from "../game/world/IsoWalls";
 
 export class Player extends BaseHuman {
   private isJumping = false;
   private isDashing = false;
   /** Píxeles que sube la textura sobre el plano físico (sigue el relieve). */
   private visualRise = 0;
-  /** Y del cuerpo al despegar (la regla de altura se evalúa en el plano). */
-  private jumpBaseY: number | null = null;
+  /** Elevación adicional por arco de salto. */
+  private jumpLift = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "player_idle_down", "", "player_");
-    // Huella en consola (F12): confirma que corre la física actual.
-    console.log("[player] física ±1 sin deslizar, subida +1 a mitad de velocidad, salto en plano de despegue");
+    console.log("[player] velocidad /2, paso +1 caminando, salto hasta +3 clicks");
     this.play("idle_down", true);
     InputSystem.capture(scene);
   }
@@ -28,32 +26,32 @@ export class Player extends BaseHuman {
   private executeJump() {
     if (this.isJumping || this.isDashing || CombatSystem.isAttacking(this)) return;
     this.isJumping = true;
-    // Congelar la base de la regla en el despegue: en el aire el cuerpo sube
-    // y re-mapearía tiles altos; sin esto se trepan muros de +2 saltando.
-    this.jumpBaseY = this.y;
     this.playJump(this.lastDirection);
-    this.scene.tweens.add({
-      targets: this,
-      scaleX: 1.12,
-      scaleY: 1.12,
-      y: this.y - 10,
-      duration: 180,
-      yoyo: true,
-      ease: 'Quad.easeOut',
-      onComplete: () => {
-        this.setScale(1);
+
+    const jumpDuration = 420;
+    const jumpPeak = 14;
+    const startTime = this.scene.time.now;
+
+    const timer = this.scene.time.addEvent({
+      delay: 16,
+      loop: true,
+      callback: () => {
+        const elapsed = this.scene.time.now - startTime;
+        const progress = Math.min(1, elapsed / jumpDuration);
+        this.jumpLift = Math.sin(progress * Math.PI) * jumpPeak;
+        if (progress >= 1) {
+          timer.destroy();
+          this.jumpLift = 0;
+          this.isJumping = false;
+          if (this.active) this.playIdle();
+        }
       }
-    });
-    this.scene.time.delayedCall(550, () => {
-      this.isJumping = false;
-      this.jumpBaseY = null;
-      if (this.active) this.playIdle();
     });
   }
 
   private executeDash() {
     if (this.isDashing || this.isJumping || CombatSystem.isAttacking(this)) return;
-    const dashSpeed = 520;
+    const dashSpeed = 260; // Velocidad a la mitad (era 520)
     const dashDuration = 200;
     const dir = this.lastDirection;
     let vx = 0, vy = 0;
@@ -68,7 +66,6 @@ export class Player extends BaseHuman {
       if (dir === "right") vy = 1;
     }
     const dashDist = dashSpeed * (dashDuration / 1000);
-    // Muestrear la trayectoria: ni cuerpos ni subidas de 2+ niveles en el camino.
     const steps = Math.max(1, Math.ceil(dashDist / 16));
     for (let i = 1; i <= steps; i++) {
       const px = this.x + (vx * dashDist * i) / steps;
@@ -90,53 +87,61 @@ export class Player extends BaseHuman {
   }
 
   /**
-   * Sin deslizamiento: si el camino directo está bloqueado (cuerpos o
-   * desnivel de +2), el personaje se detiene en seco. Cualquier vector
-   * alternativo permitía bordear muros y trepar fuera del hueco.
+   * Filtrado de movimiento por terreno:
+   * 1. Verifica camino directo.
+   * 2. Si es diagonal y choca, intenta deslizar por el eje libre.
    */
   private filterMovementByTerrain(xDir: number, yDir: number): { xDir: number; yDir: number } {
     if (xDir === 0 && yDir === 0) return { xDir, yDir };
 
-    const testDist = 6;
+    const testDist = 8;
     const nextX = this.x + xDir * testDist;
     const nextY = this.y + yDir * testDist;
 
-    // Solo avanza si el punto 6px por delante está libre y no sube 2+ niveles.
+    // 1. Camino directo
     if (!this.isBodyBlockedAt(nextX, nextY) && this.canStepTo(nextX, nextY)) {
       return { xDir, yDir };
+    }
+
+    // 2. Si el movimiento es diagonal, permitir deslizar por componente libre
+    if (xDir !== 0 && yDir !== 0) {
+      const testX = this.x + xDir * testDist;
+      if (!this.isBodyBlockedAt(testX, this.y) && this.canStepTo(testX, this.y)) {
+        return { xDir, yDir: 0 };
+      }
+      const testY = this.y + yDir * testDist;
+      if (!this.isBodyBlockedAt(this.x, testY) && this.canStepTo(this.x, testY)) {
+        return { xDir: 0, yDir };
+      }
     }
 
     return { xDir: 0, yDir: 0 };
   }
 
-  /** Altura del tile bajo un punto del plano físico (pies, sin offset visual). */
-  private groundHeightAt(px: number, py: number): number {
-    const { tileX, tileY } = isoToTile(px, py + 14);
+  /** Altura del tile bajo un punto del plano físico exacto. */
+  public groundHeightAt(px: number, py: number): number {
+    const { tileX, tileY } = isoToTile(px, py);
     return getHeightFast(tileX, tileY);
   }
 
   /**
-   * Se puede pisar el destino si no sube 2+ niveles desde el tile actual.
-   * Bajar/caer siempre vale (incluso a pozos profundos).
-   * En el aire se evalúa en el plano de despegue: el salto no da altura
-   * para trepar (sirve para cruzar huecos, no para escalar muros).
+   * Se puede pisar el destino:
+   * - Bajar/caer siempre se permite.
+   * - Caminando: subir como máximo 1 nivel (+1).
+   * - Saltando: subir hasta 3 niveles (+3).
+   * - Más de 3 niveles: bloqueado siempre.
    */
   private canStepTo(toX: number, toY: number): boolean {
-    if (this.jumpBaseY !== null) {
-      const lift = this.jumpBaseY - this.y;
-      const fromH = this.groundHeightAt(this.x, this.y + lift);
-      const toH = this.groundHeightAt(toX, toY + lift);
-      return canStepHeight(fromH, toH);
-    }
     const fromH = this.groundHeightAt(this.x, this.y);
     const toH = this.groundHeightAt(toX, toY);
-    return canStepHeight(fromH, toH);
+    if (toH <= fromH) return true;
+    const maxClimb = this.isJumping ? 3 : 1;
+    return toH - fromH <= maxClimb;
   }
 
   /**
-   * Sigue la superficie del terreno moviendo solo la TEXTURA (vía origin):
+   * Sigue la superficie del terreno moviendo la textura (vía origin):
    * el cuerpo físico queda en el plano y las colisiones no derivan.
-   * Subir es suave; bajar es caída rápida con sensación de gravedad.
    */
   private updateTerrainHeight(): void {
     const h = this.groundHeightAt(this.x, this.y);
@@ -146,11 +151,11 @@ export class Player extends BaseHuman {
       this.visualRise = target;
     } else {
       const dt = Math.min(0.05, this.scene.game.loop.delta / 1000);
-      const rate = target < this.visualRise ? 150 : 60;
+      const rate = target < this.visualRise ? 300 : 200;
       this.visualRise += Math.sign(d) * Math.min(Math.abs(d), rate * dt);
     }
     const dispH = this.displayHeight > 0 ? this.displayHeight : 64;
-    this.setOrigin(0.5, 0.5 + this.visualRise / dispH);
+    this.setOrigin(0.5, 0.5 + (this.visualRise + this.jumpLift) / dispH);
   }
 
   updateEntity() {
@@ -181,7 +186,7 @@ export class Player extends BaseHuman {
 
     if (this.isJumping) {
       body.setVelocity(0);
-      const jumpSpeed = 220;
+      const jumpSpeed = 110; // Reducido a la mitad (era 220)
       let { xDir, yDir } = InputSystem.getMovementVector(this.scene);
       ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
       if (xDir !== 0) body.setVelocityX(xDir * jumpSpeed);
@@ -197,15 +202,13 @@ export class Player extends BaseHuman {
     let { xDir, yDir, dir } = InputSystem.getMovementVector(this.scene);
     ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
 
-    // Subir un nivel (+1) cuesta el doble: velocidad a la mitad mientras se
-    // asciende. En plano y bajando, velocidad normal. (Los muros limpios de
-    // +2 ya son imposibles por canStepHeight; las terrazas +1 se pueden
-    // subir por regla, pero despacio.)
-    let speed = 200;
+    // Velocidad normal reducida a la mitad (100 px/s, era 200)
+    // Al subir +1 nivel, velocidad a la mitad (50 px/s)
+    let speed = 100;
     if (xDir !== 0 || yDir !== 0) {
       const fromH = this.groundHeightAt(this.x, this.y);
-      const toH = this.groundHeightAt(this.x + xDir * 6, this.y + yDir * 6);
-      if (toH - fromH >= 1) speed = 100;
+      const toH = this.groundHeightAt(this.x + xDir * 8, this.y + yDir * 8);
+      if (toH - fromH >= 1) speed = 50;
     }
 
     if (xDir === 0 && yDir === 0) {
@@ -238,3 +241,4 @@ export class Player extends BaseHuman {
     }
   }
 }
+

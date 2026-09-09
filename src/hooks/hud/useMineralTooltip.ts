@@ -5,8 +5,12 @@ import {
   getMineralDescription,
   WORLD_TILES,
   isoToTile,
+  tileToIso,
+  ISO_TILE_H,
 } from "../../game/world/Terrain";
-import { useGameStore } from "../../app/store/useGameStore";
+import { getTileGid, isMineralGid } from "../../game/world/WorldTiles";
+import { getMineralTileInfo, getMineralHeight } from "../../game/world/MineralHeights";
+import { HEIGHT_STEP_PX } from "../../game/world/TerrainHeight";
 
 export interface TooltipData {
   screenX: number;
@@ -17,7 +21,19 @@ export interface TooltipData {
   desc: string;
   tileX: number;
   tileY: number;
+  height: number;
+  charges: number;
+  isSpecial: boolean;
 }
+
+const GID_MAP: Record<number, string> = {
+  30: "COBRE",
+  31: "ESTANO",
+  32: "HIERRO",
+  33: "PLATA",
+  34: "ORO",
+  35: "CARBON",
+};
 
 export function useMineralTooltip() {
   const [data, setData] = useState<TooltipData | null>(null);
@@ -50,42 +66,61 @@ export function useMineralTooltip() {
         }
 
         const worldPoint = cam.getWorldPoint(canvasX, canvasY);
-        const { tileX: tx, tileY: ty } = isoToTile(worldPoint.x, worldPoint.y);
+        const { tileX: tx0, tileY: ty0 } = isoToTile(worldPoint.x, worldPoint.y);
 
-        if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) {
-          setData(null);
-          return;
-        }
+        // 1. Verificar si el tile en el plano o un mineral elevado adyacente fue clickeado
+        let selectedTx = tx0;
+        let selectedTy = ty0;
+        let selectedGid = getTileGid(tx0, ty0);
 
-        // Buscar tipo de mineral
-        let type: string | null = null;
-        try {
-          const chunkX = Math.floor(tx / 32);
-          const chunkY = Math.floor(ty / 32);
-          const chunk = (useGameStore as any).getState?.().chunks?.get?.(`${chunkX}:${chunkY}`);
-          if (chunk && Array.isArray(chunk.tiles)) {
-            const gid = chunk.tiles[ty % 32]?.[tx % 32];
-            const gidMap: Record<number, string> = {
-              30: "COBRE",
-              31: "ESTANO",
-              32: "HIERRO",
-              33: "PLATA",
-              34: "ORO",
-              35: "CARBON",
-            };
-            type = gidMap[gid] ?? null;
+        if (!selectedGid || !isMineralGid(selectedGid)) {
+          // Si el click fue sobre la parte elevada (hacia arriba en pantalla) de un mineral que está en frente:
+          let found = false;
+          for (let dy = 0; dy <= 4; dy++) {
+            for (let dx = 0; dx <= 4; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const cx = tx0 + dx;
+              const cy = ty0 + dy;
+              if (cx < 0 || cy < 0 || cx >= WORLD_TILES || cy >= WORLD_TILES) continue;
+              const gid = getTileGid(cx, cy);
+              if (gid !== undefined && isMineralGid(gid)) {
+                const h = getMineralHeight(cx, cy);
+                const iso = tileToIso(cx, cy);
+                const topX = iso.x;
+                const topY = iso.y - h * HEIGHT_STEP_PX;
+                if (
+                  Math.abs(worldPoint.x - topX) <= 32 &&
+                  worldPoint.y >= topY &&
+                  worldPoint.y <= iso.y + ISO_TILE_H
+                ) {
+                  selectedTx = cx;
+                  selectedTy = cy;
+                  selectedGid = gid;
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (found) break;
           }
-        } catch {}
+        }
 
-        if (!type) {
-          // Sin datos del backend para este tile: no se inventa información.
+        if (selectedTx < 0 || selectedTy < 0 || selectedTx >= WORLD_TILES || selectedTy >= WORLD_TILES) {
           setData(null);
           return;
         }
 
+        const type = selectedGid ? GID_MAP[selectedGid] ?? null : null;
+        if (!type) {
+          setData(null);
+          return;
+        }
+
+        const info = getMineralTileInfo(selectedTx, selectedTy);
         const css = getMineralCss(type);
         const label = getMineralDisplayName(type);
         const desc = getMineralDescription(type);
+
         setData({
           screenX: clientX,
           screenY: clientY,
@@ -93,12 +128,15 @@ export function useMineralTooltip() {
           label,
           css,
           desc,
-          tileX: tx,
-          tileY: ty,
+          tileX: selectedTx,
+          tileY: selectedTy,
+          height: info.height,
+          charges: info.charges,
+          isSpecial: info.isSpecial,
         });
 
         if (hideTimeout) window.clearTimeout(hideTimeout);
-        hideTimeout = window.setTimeout(() => setData(null), 5000);
+        hideTimeout = window.setTimeout(() => setData(null), 6000);
       } catch {
         setData(null);
       }

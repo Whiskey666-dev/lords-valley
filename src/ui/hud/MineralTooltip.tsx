@@ -9,8 +9,8 @@ export function MineralTooltip() {
   const offsetY = 18;
   const viewportW = typeof window !== "undefined" ? window.innerWidth : 1024;
   const viewportH = typeof window !== "undefined" ? window.innerHeight : 768;
-  const tooltipW = 230;
-  const tooltipH = 80;
+  const tooltipW = 240;
+  const tooltipH = 120;
   let left = data.screenX + offsetX;
   let top = data.screenY + offsetY;
   if (left + tooltipW > viewportW - 8) left = data.screenX - tooltipW - 8;
@@ -27,18 +27,40 @@ export function MineralTooltip() {
         zIndex: 60,
         pointerEvents: "none",
         background: "#0c1017f5",
-        border: `1.5px solid ${data.css}`,
-        borderLeft: `4px solid ${data.css}`,
+        border: `1.5px solid ${data.isSpecial ? "#f59e0b" : data.css}`,
+        borderLeft: `4px solid ${data.isSpecial ? "#f59e0b" : data.css}`,
         borderRadius: 8,
         padding: "8px 12px",
-        minWidth: 190,
-        maxWidth: 250,
-        boxShadow: `0 8px 28px rgba(0,0,0,0.85), 0 0 12px ${data.css}44`,
+        minWidth: 210,
+        maxWidth: 270,
+        boxShadow: data.isSpecial
+          ? "0 8px 28px rgba(0,0,0,0.85), 0 0 16px rgba(245,158,11,0.5)"
+          : `0 8px 28px rgba(0,0,0,0.85), 0 0 12px ${data.css}44`,
         backdropFilter: "blur(8px)",
         fontFamily: "system-ui, sans-serif",
         userSelect: "none",
       }}
     >
+      {data.isSpecial && (
+        <div
+          style={{
+            background: "linear-gradient(90deg, rgba(245,158,11,0.2), rgba(234,179,8,0.35), rgba(245,158,11,0.2))",
+            border: "1px solid #f59e0b",
+            borderRadius: 4,
+            padding: "2px 6px",
+            color: "#fef08a",
+            fontSize: 9.5,
+            fontWeight: 800,
+            letterSpacing: 0.5,
+            textAlign: "center",
+            marginBottom: 6,
+            textShadow: "0 0 8px rgba(245,158,11,0.6)",
+          }}
+        >
+          ✨ VETA LEGENDARIA ÚNICA ✨
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span
           style={{
@@ -69,9 +91,46 @@ export function MineralTooltip() {
           {data.label.toUpperCase()}
         </span>
       </div>
-      <div style={{ fontSize: 11, color: "#ccc", lineHeight: 1.35, marginBottom: 6 }}>
+
+      <div style={{ fontSize: 11, color: "#bbb", lineHeight: 1.35, marginBottom: 6 }}>
         {data.desc}
       </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 10 }}>
+        <div
+          style={{
+            flex: 1,
+            background: "#141c27",
+            border: "1px solid #26384f",
+            borderRadius: 4,
+            padding: "3px 6px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ color: "#8cb4ff" }}>Altura:</span>
+          <strong style={{ color: "#fff" }}>{data.height} clicks</strong>
+        </div>
+        <div
+          style={{
+            flex: 1,
+            background: data.isSpecial ? "#291b05" : "#122319",
+            border: `1px solid ${data.isSpecial ? "#b45309" : "#1f4a2b"}`,
+            borderRadius: 4,
+            padding: "3px 6px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ color: data.isSpecial ? "#fbbf24" : "#6ee7b7" }}>Cargas:</span>
+          <strong style={{ color: data.isSpecial ? "#fef08a" : "#a7f3d0" }}>
+            {data.charges} cargas
+          </strong>
+        </div>
+      </div>
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10 }}>
         <span
           style={{

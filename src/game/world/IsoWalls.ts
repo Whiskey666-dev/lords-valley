@@ -42,11 +42,14 @@ export function southWall(topX: number, topY: number, dropPx: number): IsoPoint[
 
 
 /**
- * Regla de paso entre tiles con altura: se puede subir como máximo 1 nivel.
- * Bajar/caer siempre vale (incluso a pozos profundos).
+ * Regla de paso entre tiles con altura:
+ * - Caminando: se puede subir como máximo 1 nivel.
+ * - Saltando: se puede subir hasta 3 niveles.
+ * - Bajar/caer siempre vale (incluso a pozos profundos).
  */
-export function canStepHeight(hFrom: number, hTo: number): boolean {
-  return hTo - hFrom < 2;
+export function canStepHeight(hFrom: number, hTo: number, isJumping = false): boolean {
+  if (hTo <= hFrom) return true;
+  return hTo - hFrom <= (isJumping ? 3 : 1);
 }
 
 /** Oscurece un hex por factor (0..1), con clamp por canal. */

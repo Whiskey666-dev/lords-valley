@@ -1,5 +1,6 @@
 import { WORLD_TILES } from "./Terrain";
-import { getTileGid } from "./WorldTiles";
+import { getTileGid, isMineralGid } from "./WorldTiles";
+import { getMineralHeight } from "./MineralHeights";
 
 /**
  * TerrainHeight.ts — Alturas del terreno por tile isométrico (192x192)
@@ -146,7 +147,13 @@ class TerrainHeightManager {
 
   getHeight(tx: number, ty: number): number {
     if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) return 0;
-    return this.data[this.idx(tx, ty)];
+    const edited = this.data[this.idx(tx, ty)];
+    if (edited !== 0) return edited;
+    const gid = getTileGid(tx, ty);
+    if (gid !== undefined && isMineralGid(gid)) {
+      return getMineralHeight(tx, ty);
+    }
+    return 0;
   }
 
   setHeight(tx: number, ty: number, h: number): boolean {
