@@ -11,6 +11,7 @@ import {
   getHeightFast,
   HEIGHT_STEP_PX,
 } from "../world/TerrainHeight";
+import { getTileGid } from "../world/WorldTiles";
 
 export type TerrainMode = "excavar" | "aumentar" | null;
 
@@ -34,7 +35,9 @@ export class TerrainEditSystem {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.ghost = this.scene.add.graphics();
-    this.ghost.setDepth(998);
+    // Sobre todo el relieve (muros/overlays usan depth = y, máx ~6200) y
+    // bajo la niebla (10000): el pincel siempre visible al editar.
+    this.ghost.setDepth(9500);
     this.ghost.setVisible(false);
 
     this.setupEvents();
@@ -162,7 +165,10 @@ export class TerrainEditSystem {
       return;
     }
 
-    const tiles = terrainHeightManager.getBrushTiles(tileX, tileY, this.brushSize);
+    // Solo terreno libre (igual que al aplicar): el fantasma muestra lo editable.
+    const tiles = terrainHeightManager
+      .getBrushTiles(tileX, tileY, this.brushSize)
+      .filter((t) => getTileGid(t.x, t.y) === 1);
     this.ghost.clear();
     this.ghost.setVisible(true);
 
@@ -185,23 +191,23 @@ export class TerrainEditSystem {
       const hw = ISO_TILE_W / 2;
       const hh = ISO_TILE_H / 2;
 
-      // relleno
+      // relleno (x,y = vértice norte: diamante exacto, sin desplazar)
       this.ghost.fillStyle(fillColor, fillAlpha);
       this.ghost.beginPath();
-      this.ghost.moveTo(x + hw, y);
-      this.ghost.lineTo(x + ISO_TILE_W, y + hh);
-      this.ghost.lineTo(x + hw, y + ISO_TILE_H);
-      this.ghost.lineTo(x, y + hh);
+      this.ghost.moveTo(x, y);
+      this.ghost.lineTo(x + hw, y + hh);
+      this.ghost.lineTo(x, y + ISO_TILE_H);
+      this.ghost.lineTo(x - hw, y + hh);
       this.ghost.closePath();
       this.ghost.fillPath();
 
       // borde
       this.ghost.lineStyle(2, strokeColor, strokeAlpha);
       this.ghost.beginPath();
-      this.ghost.moveTo(x + hw, y);
-      this.ghost.lineTo(x + ISO_TILE_W, y + hh);
-      this.ghost.lineTo(x + hw, y + ISO_TILE_H);
-      this.ghost.lineTo(x, y + hh);
+      this.ghost.moveTo(x, y);
+      this.ghost.lineTo(x + hw, y + hh);
+      this.ghost.lineTo(x, y + ISO_TILE_H);
+      this.ghost.lineTo(x - hw, y + hh);
       this.ghost.closePath();
       this.ghost.strokePath();
 
@@ -210,7 +216,7 @@ export class TerrainEditSystem {
       this.ghost.fillStyle(strokeColor, 0.9);
       if (isExcavar) {
         // triangulo hacia abajo en centro del rombo
-        const cx = x + hw;
+        const cx = x;
         const cy = y + hh;
         this.ghost.beginPath();
         this.ghost.moveTo(cx - 5, cy - 4);
@@ -219,7 +225,7 @@ export class TerrainEditSystem {
         this.ghost.closePath();
         this.ghost.fillPath();
       } else {
-        const cx = x + hw;
+        const cx = x;
         const cy = y + hh;
         this.ghost.beginPath();
         this.ghost.moveTo(cx - 5, cy + 4);
@@ -236,7 +242,7 @@ export class TerrainEditSystem {
       const centerIso = tileToIso(tileX, tileY);
       const ch = getHeightFast(tileX, tileY);
       const cy = centerIso.y - ch * HEIGHT_STEP_PX + ISO_TILE_H / 2;
-      const cx = centerIso.x + ISO_TILE_W / 2;
+      const cx = centerIso.x;
       // No tenemos Text en Graphics, usamos debug string via graphics? Mejor dejar solo rombos.
       // Se podría añadir un Text, pero lo omitimos para no crear/destruir cada frame.
       void cx; void cy;

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Survivor } from "../../characters/Survivor";
 import { DeadDragon } from "../../characters/DeadDragon";
-import { isBlockedTile, findNearestSafeWorldPos, isBlockedIsoWorldXY, isoToTile, tileToIso, TILE, WORLD_SIZE, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
+import { isBlockedTile, findNearestSafeWorldPos, isBlockedIsoWorldXY, isoToTile, tileToIso, TILE, WORLD_SIZE, ISO_TILE_H } from "../world/Terrain";
 
 /**
  * SpawnSystem.ts - Sistema de spawn modular.
@@ -50,7 +50,7 @@ export function spawnNpcs(
 ): void {
   const clamped = Phaser.Math.Clamp(count, 1, 10);
   for (let i = 0; i < clamped; i++) {
-    let spawn = player ? getSpawnNearPlayer(player, 80, 220) : (()=>{ const p=tileToIso(96,96); return {x:p.x+ISO_TILE_W/2,y:p.y+ISO_TILE_H/2}; })();
+    let spawn = player ? getSpawnNearPlayer(player, 80, 220) : (()=>{ const p=tileToIso(96,96); return {x:p.x,y:p.y+ISO_TILE_H/2}; })();
     let attempts = 0;
     while (
       attempts < 15 &&
@@ -58,7 +58,7 @@ export function spawnNpcs(
         npcs.some(n => n.sprite && Phaser.Math.Distance.Between(spawn.x, spawn.y, n.sprite.x, n.sprite.y) < 50) ||
         isBlockedIsoWorldXY(spawn.x, spawn.y))
     ) {
-      spawn = player ? getSpawnNearPlayer(player, 80, 220) : (()=>{ const p=tileToIso(96,96); return {x:p.x+ISO_TILE_W/2,y:p.y+ISO_TILE_H/2}; })();
+      spawn = player ? getSpawnNearPlayer(player, 80, 220) : (()=>{ const p=tileToIso(96,96); return {x:p.x,y:p.y+ISO_TILE_H/2}; })();
       attempts++;
     }
 
@@ -82,7 +82,7 @@ export function spawnDeadDragons(
 ): void {
   const clamped = Phaser.Math.Clamp(count, 1, 5);
   for (let i = 0; i < clamped; i++) {
-    let spawn = player ? getSpawnNearPlayer(player, 120, 320) : (()=>{ const p=tileToIso(96,96); return {x:p.x+ISO_TILE_W/2,y:p.y+ISO_TILE_H/2}; })();
+    let spawn = player ? getSpawnNearPlayer(player, 120, 320) : (()=>{ const p=tileToIso(96,96); return {x:p.x,y:p.y+ISO_TILE_H/2}; })();
     let attempts = 0;
     while (
       attempts < 15 &&
@@ -91,7 +91,7 @@ export function spawnDeadDragons(
         existingNpcs.some(n => n.sprite && Phaser.Math.Distance.Between(spawn.x, spawn.y, n.sprite.x, n.sprite.y) < 60) ||
         isBlockedIsoWorldXY(spawn.x, spawn.y))
     ) {
-      spawn = player ? getSpawnNearPlayer(player, 120, 320) : (()=>{ const p=tileToIso(96,96); return {x:p.x+ISO_TILE_W/2,y:p.y+ISO_TILE_H/2}; })();
+      spawn = player ? getSpawnNearPlayer(player, 120, 320) : (()=>{ const p=tileToIso(96,96); return {x:p.x,y:p.y+ISO_TILE_H/2}; })();
       attempts++;
     }
     const dragon = new DeadDragon(isAlly, spawn.x, spawn.y);

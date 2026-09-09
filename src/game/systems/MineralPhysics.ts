@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { CHUNK_TILES, WORLD_CHUNKS, isMineralTileFast, tileToIso, isoToTile, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
+import { CHUNK_TILES, WORLD_CHUNKS, tileToIso, isoToTile, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
+import { getChunkTiles } from "../world/WorldTiles";
 
 /**
  * MineralPhysics.ts - Sistema de física para minerales.
@@ -71,12 +72,11 @@ export class MineralPhysicsManager {
       }
     }
 
-    // Crear nuevos chunks
+    // Crear nuevos chunks (si aún no hay datos del backend, se reintenta en el próximo sync)
     for (const key of needed) {
       if (!this.activeChunks.has(key)) {
         const [cx2, cy2] = key.split(":").map(Number);
-        this.createChunk(cx2, cy2);
-        this.activeChunks.add(key);
+        if (this.createChunk(cx2, cy2)) this.activeChunks.add(key);
       }
     }
 
@@ -92,18 +92,23 @@ export class MineralPhysicsManager {
     if (npcs) this.ensureNpcColliders(npcs);
   }
 
-  private createChunk(cx: number, cy: number): void {
-    if (!this.group) return;
+  private createChunk(cx: number, cy: number): boolean {
+    if (!this.group) return false;
+    // Tiles del backend; sin datos aún se reintenta en el próximo sync.
+    const tiles = getChunkTiles(cx, cy);
+    if (!tiles) return false;
     const objs: Phaser.GameObjects.GameObject[] = [];
     for (let y = 0; y < CHUNK_TILES; y++) {
       for (let x = 0; x < CHUNK_TILES; x++) {
+        const gid = tiles[y][x];
+        if (gid < 30 || gid > 35) continue;
         const wx = cx * CHUNK_TILES + x;
         const wy = cy * CHUNK_TILES + y;
-        if (!isMineralTileFast(wx, wy)) continue;
         const iso = tileToIso(wx, wy);
-        const isoX = iso.x + ISO_TILE_W/2;
+        // Centro del rombo = vértice norte + medio alto (sprites con origin 0.5)
+        const isoX = iso.x;
         const isoY = iso.y + ISO_TILE_H/2;
-        // create en staticGroup en coords isométricas (Bottom-Center del rombo)
+        // create en staticGroup en coords isométricas (centro del rombo)
         const img = this.group.create(isoX, isoY, "mineral_pixel") as Phaser.Physics.Arcade.Image;
         img.setDisplaySize(ISO_TILE_W/2, ISO_TILE_H/2);
         img.setAlpha(0);
@@ -119,6 +124,7 @@ export class MineralPhysicsManager {
       }
     }
     this.chunkObjects.set(this.chunkKey(cx, cy), objs);
+    return true;
   }
 
   private removeChunk(key: string): void {

@@ -1,14 +1,10 @@
 import Phaser from "phaser";
-import {
-  isWaterTileFast,
-  isTreeTile,
-  getMineralTypeFast,
-} from "../world/Terrain";
 import { collisionMatrix } from "../world/CollisionMatrix";
+import { getTileGid } from "../world/WorldTiles";
 
 /**
  * Capa A — Suelo Estático
- * Inicializa la matriz de colisión y el estado del terreno.
+ * Inicializa la matriz de colisión desde los tiles del backend.
  */
 export class StaticGroundLayer {
   private baked = false;
@@ -17,8 +13,8 @@ export class StaticGroundLayer {
 
   bake() {
     if (this.baked) return;
-    // Construir matriz lógica de colisiones
-    collisionMatrix.buildFromTerrain(isWaterTileFast, getMineralTypeFast as any, isTreeTile as any);
+    // Construir matriz lógica de colisiones (el boot precarga el mundo)
+    collisionMatrix.buildFromWorldTiles(getTileGid);
     this.baked = true;
   }
 

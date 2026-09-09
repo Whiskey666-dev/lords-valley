@@ -3,7 +3,8 @@ import { startLaunchGame } from "../../game/main";
 import { getBinding, isRebindingActive, isConsoleOpenActive } from "../../ui/input/KeyBindings";
 import { useGameStore } from "../../app/store/useGameStore";
 import { fetchPlayer } from "../../app/api/player.api";
-import { setWorldSeed, clearTerrainCache, isWaterTileFast, isTreeTile, getMineralTypeFast } from "../../game/world/Terrain";
+import { setActiveSeed, ensureWorldTiles, getTileGid } from "../../game/world/WorldTiles";
+import { invalidateMinimapBase } from "../hud/useMiniMap";
 import { terrainHeightManager } from "../../game/world/TerrainHeight";
 import { farmPlotManager } from "../../game/farming/FarmPlotManager";
 import { collisionMatrix } from "../../game/world/CollisionMatrix";
@@ -98,11 +99,21 @@ export function useAppController() {
       const { fetchSettlement: fetchSett } = await import("../../app/api/settlement.api");
       const settlement: any = await fetchSett(settlementId).catch(() => null);
       const seed = settlement?.worldSeed || `seed_${settlementId.slice(-8)}_${Date.now().toString(36)}`;
-      setWorldSeed(seed);
-      clearTerrainCache();
+      // Fuente única: el backend genera los tiles de este mundo; precargar los 36 chunks.
+      setActiveSeed(seed);
+      try {
+        await ensureWorldTiles(seed);
+      } catch (e) {
+        console.warn("[App] precarga de chunks falló, se cargarán al explorar", e);
+      }
       // Reconstruir colisiones para la nueva semilla (StaticGroundLayer y ChunkRenderer lo harán de nuevo, pero aseguramos)
       try {
-        collisionMatrix.buildFromTerrain(isWaterTileFast as any, getMineralTypeFast as any, isTreeTile as any);
+        collisionMatrix.buildFromWorldTiles(getTileGid);
+      } catch {}
+      // El minimapa hornea de nuevo con los tiles de este mundo; la niebla se reinicia.
+      invalidateMinimapBase();
+      try {
+        window.dispatchEvent(new CustomEvent("phaser-fog-clear"));
       } catch {}
 
       // Si el settlement trae worldState con heights/plots, hidratar managers
@@ -126,8 +137,7 @@ export function useAppController() {
     } catch (e) {
       console.warn("[App] handleEnterGame worldSeed fail", e);
       // fallback: usar id como seed
-      setWorldSeed(settlementId);
-      clearTerrainCache();
+      setActiveSeed(settlementId);
       fetchSettlement(settlementId).catch(() => {});
     }
     setShowStartMenu(false);

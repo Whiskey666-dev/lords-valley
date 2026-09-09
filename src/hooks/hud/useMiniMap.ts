@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useGameStore } from "../../app/store/useGameStore";
+import { collisionMatrix } from "../../game/world/CollisionMatrix";
 import {
-  isWaterTileFast,
-  isTreeTile,
-  getMineralTypeFast,
-  getMineralCss,
+  gidToCss,
+  hash2i,
   TILE,
   WORLD_TILES,
   ISO_TILE_W,
@@ -14,8 +14,8 @@ import {
   tileToIso,
   isoToTile,
   worldToIso,
-  noise
 } from "../../game/world/Terrain";
+import { getTileGid } from "../../game/world/WorldTiles";
 
 export const FOG_VISION_RADIUS = 300;
 export const WORLD_SIZE = 6144;
@@ -33,6 +33,12 @@ const STORAGE_FOG_EXPLORED_KEY = "lordsvalley_fog_explored_v1";
 let globalBaseCanvas: HTMLCanvasElement | null = null;
 let globalFogCanvas: HTMLCanvasElement | null = null;
 let isBaseBaked = false;
+
+/** Invalida la base horneada (cambio de mundo/seed): el próximo mount la hornea de nuevo. */
+export function invalidateMinimapBase(): void {
+  isBaseBaked = false;
+  globalBaseCanvas = null;
+}
 
 function getFogStorageKey(): string {
   try {
@@ -61,6 +67,44 @@ export function useMiniMap() {
   const [fogRadius, setFogRadius] = useState<number>(FOG_VISION_RADIUS);
   const fogTileRadius = Math.ceil(fogRadius / TILE);
   const fogTileRadiusSq = fogTileRadius * fogTileRadius;
+
+  // Época de horneado: auto-cura el minimapa si los chunks del backend llegan
+  // tarde (bulk lento en el arranque) y reconstruye colisiones con datos reales.
+  const [baseEpoch, setBaseEpoch] = useState(0);
+  useEffect(() => {
+    let timer: number | null = null;
+    let lastCount = 0;
+    try {
+      lastCount = useGameStore.getState().chunks.size;
+    } catch {}
+    const unsub = useGameStore.subscribe((s) => {
+      let n = 0;
+      try {
+        n = s.chunks.size;
+      } catch {}
+      if (n === lastCount) return;
+      lastCount = n;
+      if (timer) window.clearTimeout(timer);
+      timer = null;
+      if (n === 0) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        try {
+          collisionMatrix.buildFromWorldTiles(getTileGid);
+        } catch {}
+        isBaseBaked = false;
+        globalBaseCanvas = null;
+        baseCanvasRef.current = null;
+        setBaseEpoch((e) => e + 1);
+      }, 800);
+    });
+    return () => {
+      try {
+        unsub();
+      } catch {}
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
 
   const updateFogCanvas = useCallback(() => {
     const OFF_W = 600;
@@ -250,22 +294,20 @@ export function useMiniMap() {
 
     for (let ty = 0; ty < WORLD_TILES; ty++) {
       for (let tx = 0; tx < WORLD_TILES; tx++) {
-        const cx = (tx / 32) | 0;
-        const cy = (ty / 32) | 0;
-        const lx = tx & 31;
-        const ly = ty & 31;
+        // Terreno del backend (fuente única). Sin datos: verde base.
+        const gid = getTileGid(tx, ty);
 
         let css: string | null = null;
-        const mineral = getMineralTypeFast(tx, ty);
-
-        if (isWaterTileFast(tx, ty)) {
+        if (gid === undefined) {
+          css = null;
+        } else if (gid === 102) {
           css = "#023e8a";
-        } else if (mineral) {
-          css = getMineralCss(mineral);
-        } else if (isTreeTile(cx, cy, lx, ly)) {
+        } else if (gid >= 30 && gid <= 35) {
+          css = gidToCss(gid);
+        } else if (gid === 2) {
           css = "#8b4513";
         } else {
-          const n = noise(cx, cy, lx, ly);
+          const n = hash2i(tx, ty);
           if (n > 0.4) css = "#3b7a45";
           else if (n < -0.3) css = "#244d2b";
         }
@@ -299,7 +341,8 @@ export function useMiniMap() {
       bCtx.fill();
     }
     isBaseBaked = true;
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseEpoch]);
 
   useEffect(() => {
     const onClear = () => {
@@ -421,7 +464,7 @@ export function useMiniMap() {
     // 3) Misiones
     if (showMissions) {
       const missionIso = tileToIso(96, 96);
-      const mIsoX = missionIso.x + ISO_TILE_W / 2;
+      const mIsoX = missionIso.x;
       const mIsoY = missionIso.y + ISO_TILE_H / 2;
       if (!fogEnabled || isExplored(96, 96)) {
         const mx = mIsoX * isoScale + offsetX;

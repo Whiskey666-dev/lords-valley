@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { getSocket, joinSettlement } from '../socket';
-import { fetchSettlement, fetchChunk } from '../api/settlement.api';
+import { fetchSettlement } from '../api/settlement.api';
 
 interface GameState {
   settlement: any | null;
@@ -22,14 +22,12 @@ interface GameState {
   selectBuilding: (id: string | null) => void;
   clearSelection: () => void;
   setZoom: (z: number) => void;
-  getChunk: (x: number, y: number) => Promise<any>;
   setChunk: (c: any) => void;
   getLvyDisplay: () => string;
   resetState: () => void;
 }
 
 const chunkKey = (x: number, y: number) => `${x}:${y}`;
-const pendingChunks = new Map<string, Promise<any>>();
 let lastJoinedId: string | null = null;
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -134,21 +132,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   clearSelection: () => set({ selectedId: null, selectedBuildingId: null }),
 
   setZoom: (z: number) => set({ zoom: Math.max(0, Math.min(100, Math.round(z))) }),
-
-  getChunk: async (x: number, y: number) => {
-    const key = chunkKey(x, y);
-    const existing = get().chunks.get(key);
-    if (existing) return existing;
-    const pending = pendingChunks.get(key);
-    if (pending) return pending;
-    const promise = fetchChunk(x, y).then((chunk) => {
-      get().setChunk(chunk);
-      pendingChunks.delete(key);
-      return chunk;
-    }).catch((e) => { pendingChunks.delete(key); throw e; });
-    pendingChunks.set(key, promise);
-    return promise;
-  },
 
   setChunk: (c: any) =>
     set((s) => {

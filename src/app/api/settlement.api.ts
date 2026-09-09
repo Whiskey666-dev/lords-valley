@@ -55,14 +55,14 @@ export async function deleteSettlement(id: string): Promise<void> {
   await api.delete(`/settlements/${id}`);
 }
 
-export async function fetchChunk(x: number, y: number, signal?: AbortSignal) {
-  const { data } = await api.get(`/map/chunks`, { params: { x, y }, signal, timeout: 5000 });
+export async function fetchChunk(x: number, y: number, seed?: string, signal?: AbortSignal) {
+  const { data } = await api.get(`/map/chunks`, { params: seed ? { x, y, seed } : { x, y }, signal, timeout: 5000 });
   return data;
 }
 
-export async function fetchChunksBulk(chunks: { x: number; y: number }[]) {
+export async function fetchChunksBulk(chunks: { x: number; y: number }[], seed?: string) {
   if (chunks.length === 0) return [];
-  if (chunks.length === 1) return [await fetchChunk(chunks[0].x, chunks[0].y)];
-  const { data } = await api.post(`/map/chunks/generate`, { chunks: chunks.map(c => ({ chunkX: c.x, chunkY: c.y })) }, { timeout: 12000 });
+  if (chunks.length === 1) return [await fetchChunk(chunks[0].x, chunks[0].y, seed)];
+  const { data } = await api.post(`/map/chunks/generate`, { chunks: chunks.map(c => ({ chunkX: c.x, chunkY: c.y })), ...(seed ? { seed } : {}) }, { timeout: 30000 });
   return data;
 }

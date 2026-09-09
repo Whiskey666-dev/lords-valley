@@ -5,10 +5,8 @@ import {
   ISO_TILE_W,
   ISO_TILE_H,
   WORLD_TILES,
-  isWaterTileFast,
-  getMineralTypeFast,
-  isTreeTile,
 } from "../world/Terrain";
+import { getTileGid } from "../world/WorldTiles";
 import { collisionMatrix } from "../world/CollisionMatrix";
 import { farmPlotManager, type FarmPlotData } from "../farming/FarmPlotManager";
 import {
@@ -141,16 +139,11 @@ export class FarmPlacementSystem {
     if (tileX < 0 || tileX >= WORLD_TILES || tileY < 0 || tileY >= WORLD_TILES) {
       return false;
     }
-    // Verificar agua
-    if (isWaterTileFast(tileX, tileY)) return false;
-    // Verificar mineral
-    if (getMineralTypeFast(tileX, tileY)) return false;
-    // Verificar árbol
-    const cx = Math.floor(tileX / 32);
-    const cy = Math.floor(tileY / 32);
-    const lx = tileX % 32;
-    const ly = tileY % 32;
-    if (isTreeTile(cx, cy, lx, ly)) return false;
+    // Terreno del backend: agua, mineral o árbol bloquean la parcela.
+    // Sin datos aún (mundo cargando) no se puede colocar.
+    const gid = getTileGid(tileX, tileY);
+    if (gid === undefined) return false;
+    if (gid === 102 || gid === 2 || (gid >= 30 && gid <= 35)) return false;
     // Verificar colisión
     if (collisionMatrix.isBlockedTile(tileX, tileY)) return false;
     // Verificar si ya hay una parcela colocada
@@ -175,31 +168,31 @@ export class FarmPlacementSystem {
     const fillColor = isValid ? 0x3d2314 : 0x771111;
     const strokeColor = isValid ? 0x4caf50 : 0xf44336;
 
-    // Relleno de la tierra café
+    // Relleno de la tierra café (isoPos = vértice norte: diamante exacto)
     this.ghostGraphics.fillStyle(fillColor, 0.75);
     this.ghostGraphics.beginPath();
-    this.ghostGraphics.moveTo(isoPos.x + hw, isoPos.y);
-    this.ghostGraphics.lineTo(isoPos.x + ISO_TILE_W, isoPos.y + hh);
-    this.ghostGraphics.lineTo(isoPos.x + hw, isoPos.y + ISO_TILE_H);
-    this.ghostGraphics.lineTo(isoPos.x, isoPos.y + hh);
+    this.ghostGraphics.moveTo(isoPos.x, isoPos.y);
+    this.ghostGraphics.lineTo(isoPos.x + hw, isoPos.y + hh);
+    this.ghostGraphics.lineTo(isoPos.x, isoPos.y + ISO_TILE_H);
+    this.ghostGraphics.lineTo(isoPos.x - hw, isoPos.y + hh);
     this.ghostGraphics.closePath();
     this.ghostGraphics.fillPath();
 
     // Borde brillante de validación
     this.ghostGraphics.lineStyle(2, strokeColor, 0.9);
     this.ghostGraphics.beginPath();
-    this.ghostGraphics.moveTo(isoPos.x + hw, isoPos.y);
-    this.ghostGraphics.lineTo(isoPos.x + ISO_TILE_W, isoPos.y + hh);
-    this.ghostGraphics.lineTo(isoPos.x + hw, isoPos.y + ISO_TILE_H);
-    this.ghostGraphics.lineTo(isoPos.x, isoPos.y + hh);
+    this.ghostGraphics.moveTo(isoPos.x, isoPos.y);
+    this.ghostGraphics.lineTo(isoPos.x + hw, isoPos.y + hh);
+    this.ghostGraphics.lineTo(isoPos.x, isoPos.y + ISO_TILE_H);
+    this.ghostGraphics.lineTo(isoPos.x - hw, isoPos.y + hh);
     this.ghostGraphics.closePath();
     this.ghostGraphics.strokePath();
 
-    // Líneas de surcos de tierra si es válido
+    // Líneas de surcos de tierra si es válido (centradas en el rombo exacto)
     if (isValid) {
       this.ghostGraphics.lineStyle(1, 0x5a341a, 0.6);
-      this.ghostGraphics.lineBetween(isoPos.x + hw - 10, isoPos.y + hh - 4, isoPos.x + hw + 10, isoPos.y + hh + 6);
-      this.ghostGraphics.lineBetween(isoPos.x + hw - 16, isoPos.y + hh, isoPos.x + hw + 4, isoPos.y + hh + 10);
+      this.ghostGraphics.lineBetween(isoPos.x - 10, isoPos.y + hh - 4, isoPos.x + 10, isoPos.y + hh + 6);
+      this.ghostGraphics.lineBetween(isoPos.x - 16, isoPos.y + hh, isoPos.x + 4, isoPos.y + hh + 10);
     }
   }
 
@@ -222,10 +215,10 @@ export class FarmPlacementSystem {
     flash.setDepth(100);
     flash.lineStyle(2, 0xffeb3b, 1);
     flash.beginPath();
-    flash.moveTo(isoPos.x + 32, isoPos.y);
-    flash.lineTo(isoPos.x + 64, isoPos.y + 16);
-    flash.lineTo(isoPos.x + 32, isoPos.y + 32);
-    flash.lineTo(isoPos.x, isoPos.y + 16);
+    flash.moveTo(isoPos.x, isoPos.y);
+    flash.lineTo(isoPos.x + 32, isoPos.y + 16);
+    flash.lineTo(isoPos.x, isoPos.y + 32);
+    flash.lineTo(isoPos.x - 32, isoPos.y + 16);
     flash.closePath();
     flash.strokePath();
 
@@ -278,7 +271,9 @@ export class FarmPlacementSystem {
    */
   private createPlotContainer(plot: FarmPlotData): Phaser.GameObjects.Container {
     const isoPos = tileToIso(plot.tileX, plot.tileY);
-    const container = this.scene.add.container(isoPos.x, isoPos.y);
+    // El contenido está en coords locales box-left (rombo 0..64, hitPoly):
+    // el contenedor va en la esquina box-left = vértice norte - medio tile.
+    const container = this.scene.add.container(isoPos.x - ISO_TILE_W / 2, isoPos.y);
     container.setDepth(3 + (plot.tileX + plot.tileY) * 0.001);
 
     // 1) Gráficos del suelo de tierra café oscuro

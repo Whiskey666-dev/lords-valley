@@ -5,13 +5,22 @@ import type { Direction8 } from "./Animations";
 import * as InputSystem from "../game/systems/InputSystem";
 import { isGameInputBlocked } from "../ui/input/KeyBindings";
 import { collisionMatrix } from "../game/world/CollisionMatrix";
+import { isoToTile } from "../game/world/Terrain";
+import { getHeightFast, HEIGHT_STEP_PX } from "../game/world/TerrainHeight";
+import { canStepHeight } from "../game/world/IsoWalls";
 
 export class Player extends BaseHuman {
   private isJumping = false;
   private isDashing = false;
+  /** Píxeles que sube la textura sobre el plano físico (sigue el relieve). */
+  private visualRise = 0;
+  /** Y del cuerpo al despegar (la regla de altura se evalúa en el plano). */
+  private jumpBaseY: number | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, "player_idle_down", "", "player_");
+    // Huella en consola (F12): confirma que corre la física actual.
+    console.log("[player] física ±1 sin deslizar, subida +1 a mitad de velocidad, salto en plano de despegue");
     this.play("idle_down", true);
     InputSystem.capture(scene);
   }
@@ -19,6 +28,9 @@ export class Player extends BaseHuman {
   private executeJump() {
     if (this.isJumping || this.isDashing || CombatSystem.isAttacking(this)) return;
     this.isJumping = true;
+    // Congelar la base de la regla en el despegue: en el aire el cuerpo sube
+    // y re-mapearía tiles altos; sin esto se trepan muros de +2 saltando.
+    this.jumpBaseY = this.y;
     this.playJump(this.lastDirection);
     this.scene.tweens.add({
       targets: this,
@@ -34,6 +46,7 @@ export class Player extends BaseHuman {
     });
     this.scene.time.delayedCall(550, () => {
       this.isJumping = false;
+      this.jumpBaseY = null;
       if (this.active) this.playIdle();
     });
   }
@@ -55,9 +68,13 @@ export class Player extends BaseHuman {
       if (dir === "right") vy = 1;
     }
     const dashDist = dashSpeed * (dashDuration / 1000);
-    const targetX = this.x + vx * dashDist;
-    const targetY = this.y + vy * dashDist;
-    if (this.isBodyBlockedAt(targetX, targetY)) return;
+    // Muestrear la trayectoria: ni cuerpos ni subidas de 2+ niveles en el camino.
+    const steps = Math.max(1, Math.ceil(dashDist / 16));
+    for (let i = 1; i <= steps; i++) {
+      const px = this.x + (vx * dashDist * i) / steps;
+      const py = this.y + (vy * dashDist * i) / steps;
+      if (this.isBodyBlockedAt(px, py) || !this.canStepTo(px, py)) return;
+    }
     this.isDashing = true;
     const body = this.body as Phaser.Physics.Arcade.Body;
     this.playDash(this.lastDirection);
@@ -73,9 +90,9 @@ export class Player extends BaseHuman {
   }
 
   /**
-   * Sistema de deslizamiento fluido para superficies isométricas 2:1.
-   * Si choca contra cualquier cara diagonal (SE, SO, NE, NO) o recta,
-   * proyecta el movimiento suavemente a lo largo de la tangente del obstáculo.
+   * Sin deslizamiento: si el camino directo está bloqueado (cuerpos o
+   * desnivel de +2), el personaje se detiene en seco. Cualquier vector
+   * alternativo permitía bordear muros y trepar fuera del hueco.
    */
   private filterMovementByTerrain(xDir: number, yDir: number): { xDir: number; yDir: number } {
     if (xDir === 0 && yDir === 0) return { xDir, yDir };
@@ -84,56 +101,61 @@ export class Player extends BaseHuman {
     const nextX = this.x + xDir * testDist;
     const nextY = this.y + yDir * testDist;
 
-    // Si el camino directo está libre, avanzar normalmente
-    if (!this.isBodyBlockedAt(nextX, nextY)) {
+    // Solo avanza si el punto 6px por delante está libre y no sube 2+ niveles.
+    if (!this.isBodyBlockedAt(nextX, nextY) && this.canStepTo(nextX, nextY)) {
       return { xDir, yDir };
-    }
-
-    // Candidatos de deslizamiento: tangentes isométricas 2:1 y componentes por eje
-    const candidates: Array<{ x: number; y: number; dot: number }> = [];
-
-    // Componentes de eje directo
-    if (xDir !== 0) candidates.push({ x: xDir, y: 0, dot: 1 });
-    if (yDir !== 0) candidates.push({ x: 0, y: yDir, dot: 1 });
-
-    // Tangentes diagonales isométricas (aristas del rombo)
-    const isoTangents = [
-      { x: 1, y: -0.5 },
-      { x: -1, y: -0.5 },
-      { x: 1, y: 0.5 },
-      { x: -1, y: 0.5 },
-      { x: 0.8, y: -0.8 },
-      { x: -0.8, y: -0.8 },
-      { x: 0.8, y: 0.8 },
-      { x: -0.8, y: 0.8 },
-    ];
-
-    for (const t of isoTangents) {
-      const dot = t.x * xDir + t.y * yDir;
-      if (dot > 0.01) {
-        candidates.push({ x: t.x, y: t.y, dot });
-      }
-    }
-
-    // Ordenar de mayor a menor afinidad con la dirección de avance deseada
-    candidates.sort((a, b) => b.dot - a.dot);
-
-    // Probar el primer vector de deslizamiento libre
-    for (const cand of candidates) {
-      const candX = this.x + cand.x * testDist;
-      const candY = this.y + cand.y * testDist;
-      if (!this.isBodyBlockedAt(candX, candY)) {
-        return { xDir: cand.x, yDir: cand.y };
-      }
     }
 
     return { xDir: 0, yDir: 0 };
   }
 
-  updateEntity() {
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    const speed = 200;
+  /** Altura del tile bajo un punto del plano físico (pies, sin offset visual). */
+  private groundHeightAt(px: number, py: number): number {
+    const { tileX, tileY } = isoToTile(px, py + 14);
+    return getHeightFast(tileX, tileY);
+  }
 
+  /**
+   * Se puede pisar el destino si no sube 2+ niveles desde el tile actual.
+   * Bajar/caer siempre vale (incluso a pozos profundos).
+   * En el aire se evalúa en el plano de despegue: el salto no da altura
+   * para trepar (sirve para cruzar huecos, no para escalar muros).
+   */
+  private canStepTo(toX: number, toY: number): boolean {
+    if (this.jumpBaseY !== null) {
+      const lift = this.jumpBaseY - this.y;
+      const fromH = this.groundHeightAt(this.x, this.y + lift);
+      const toH = this.groundHeightAt(toX, toY + lift);
+      return canStepHeight(fromH, toH);
+    }
+    const fromH = this.groundHeightAt(this.x, this.y);
+    const toH = this.groundHeightAt(toX, toY);
+    return canStepHeight(fromH, toH);
+  }
+
+  /**
+   * Sigue la superficie del terreno moviendo solo la TEXTURA (vía origin):
+   * el cuerpo físico queda en el plano y las colisiones no derivan.
+   * Subir es suave; bajar es caída rápida con sensación de gravedad.
+   */
+  private updateTerrainHeight(): void {
+    const h = this.groundHeightAt(this.x, this.y);
+    const target = h * HEIGHT_STEP_PX;
+    const d = target - this.visualRise;
+    if (Math.abs(d) < 0.5) {
+      this.visualRise = target;
+    } else {
+      const dt = Math.min(0.05, this.scene.game.loop.delta / 1000);
+      const rate = target < this.visualRise ? 150 : 60;
+      this.visualRise += Math.sign(d) * Math.min(Math.abs(d), rate * dt);
+    }
+    const dispH = this.displayHeight > 0 ? this.displayHeight : 64;
+    this.setOrigin(0.5, 0.5 + this.visualRise / dispH);
+  }
+
+  updateEntity() {
+    this.updateTerrainHeight();
+    const body = this.body as Phaser.Physics.Arcade.Body;
     if (isGameInputBlocked()) {
       body.setVelocity(0);
       if (!this.isDashing && !CombatSystem.isAttacking(this) && !this.isJumping) {
@@ -174,6 +196,17 @@ export class Player extends BaseHuman {
 
     let { xDir, yDir, dir } = InputSystem.getMovementVector(this.scene);
     ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
+
+    // Subir un nivel (+1) cuesta el doble: velocidad a la mitad mientras se
+    // asciende. En plano y bajando, velocidad normal. (Los muros limpios de
+    // +2 ya son imposibles por canStepHeight; las terrazas +1 se pueden
+    // subir por regla, pero despacio.)
+    let speed = 200;
+    if (xDir !== 0 || yDir !== 0) {
+      const fromH = this.groundHeightAt(this.x, this.y);
+      const toH = this.groundHeightAt(this.x + xDir * 6, this.y + yDir * 6);
+      if (toH - fromH >= 1) speed = 100;
+    }
 
     if (xDir === 0 && yDir === 0) {
       dir = "";

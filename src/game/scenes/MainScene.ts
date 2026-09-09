@@ -9,7 +9,7 @@ import { setupCamera, updateCamera } from "../systems/CameraSystem";
 import { getCenterSpawn, spawnNpcs, spawnDeadDragons } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { CameraController } from "../systems/CameraController";
-import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
+import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_H } from "../world/Terrain";
 import { collisionMatrix } from "../world/CollisionMatrix";
 import { StaticGroundLayer } from "../layers/StaticGroundLayer";
 import { DynamicLayer } from "../layers/DynamicLayer";
@@ -307,7 +307,7 @@ export class MainScene extends Phaser.Scene {
   private spawnPlayer(): void {
     const spawn = getCenterSpawn(this);
     const isoSpawn = worldToIso(spawn.x, spawn.y);
-    this.player = new Player(this, isoSpawn.x + ISO_TILE_W/2, isoSpawn.y + ISO_TILE_H/2);
+    this.player = new Player(this, isoSpawn.x, isoSpawn.y + ISO_TILE_H/2);
     this.player.setOrigin(0.5, 0.5);
 
     try {
@@ -351,7 +351,7 @@ export class MainScene extends Phaser.Scene {
       const { chunkX, chunkY } = e.detail;
       if (this.cameraFollow) { this.cameraFollow = false; this.cameraController.setFollowMode(false); }
       const p = tileToIso(chunkX * 32 + 16, chunkY * 32 + 16);
-      this.cameras.main.centerOn(p.x + ISO_TILE_W/2, p.y + ISO_TILE_H/2);
+      this.cameras.main.centerOn(p.x, p.y + ISO_TILE_H/2);
     }) as EventListener);
 
     window.addEventListener('minimap-goto-world' as any, ((e: CustomEvent<{ x: number; y: number }>) => {

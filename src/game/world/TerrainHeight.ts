@@ -1,4 +1,5 @@
 import { WORLD_TILES } from "./Terrain";
+import { getTileGid } from "./WorldTiles";
 
 /**
  * TerrainHeight.ts — Alturas del terreno por tile isométrico (192x192)
@@ -187,6 +188,9 @@ class TerrainHeightManager {
     const changed: Array<{ x: number; y: number; h: number }> = [];
     const changedChunks = new Set<string>();
     for (const t of tiles) {
+      // Solo terreno libre (césped GID 1): agua, minerales y árboles no se
+      // excavan ni se elevan. Sin datos del mundo aún, no se toca nada.
+      if (getTileGid(t.x, t.y) !== 1) continue;
       const i = this.idx(t.x, t.y);
       const cur = this.data[i];
       const next = Math.max(HEIGHT_MIN, Math.min(HEIGHT_MAX, cur + delta));

@@ -52,18 +52,16 @@ export class CollisionMatrix {
   }
 
   /**
-   * Rellena la matriz desde Terrain procedimental.
+   * Rellena la matriz desde los tiles del BACKEND (fuente única).
    * Solo el agua y los minerales son obstáculos sólidos intransitables.
+   * Tiles aún no cargados se consideran libres (el boot precarga el mundo).
    */
-  buildFromTerrain(
-    isWaterTileFast: (x: number, y: number) => boolean,
-    isMineralTileFast: (x: number, y: number) => boolean,
-    _isTreeTile?: (cx: number, cy: number, lx: number, ly: number) => boolean
-  ) {
+  buildFromWorldTiles(getGid: (tx: number, ty: number) => number | undefined): void {
     this.clear();
     for (let ty = 0; ty < CollisionMatrix.H; ty++) {
       for (let tx = 0; tx < CollisionMatrix.W; tx++) {
-        if (isWaterTileFast(tx, ty) || isMineralTileFast(tx, ty)) {
+        const gid = getGid(tx, ty);
+        if (gid !== undefined && (gid === 102 || (gid >= 30 && gid <= 35))) {
           this.data[this.idx(tx, ty)] = 1;
         }
       }

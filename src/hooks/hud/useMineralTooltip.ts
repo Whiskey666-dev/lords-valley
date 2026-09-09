@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  getMineralType,
   getMineralCss,
   getMineralDisplayName,
   getMineralDescription,
@@ -79,10 +78,7 @@ export function useMineralTooltip() {
         } catch {}
 
         if (!type) {
-          type = getMineralType(tx, ty);
-        }
-
-        if (!type) {
+          // Sin datos del backend para este tile: no se inventa información.
           setData(null);
           return;
         }
