@@ -15,11 +15,18 @@ export type HumanBodyConfig = {
   offsetY: number;
 };
 
+/**
+ * Origen vertical canónico para personajes humanos (frames 48x64 px).
+ * Los pies del personaje y el centro de sombra descansan en la fila Y = 42 del frame.
+ * 42 / 64 = 0.65625. Con este anclaje, (x, y) es el punto de contacto exacto de los pies con el suelo isométrico.
+ */
+export const BASE_HUMAN_ORIGIN_Y = 42 / 64;
+
 export const DEFAULT_HUMAN_BODY: HumanBodyConfig = {
   width: 20,
-  height: 20,
+  height: 16,
   offsetX: 14,
-  offsetY: 36,
+  offsetY: 34,
 };
 
 export abstract class BaseHuman extends Phaser.Physics.Arcade.Sprite {
@@ -47,7 +54,7 @@ export abstract class BaseHuman extends Phaser.Physics.Arcade.Sprite {
     body.setCollideWorldBounds(true);
     body.setSize(bodyConfig.width, bodyConfig.height);
     body.setOffset(bodyConfig.offsetX, bodyConfig.offsetY);
-    this.setOrigin(0.5, 0.5);
+    this.setOrigin(0.5, BASE_HUMAN_ORIGIN_Y);
   }
 
   /** Traduce xDir/yDir (-1..1) a Direction8 estándar, reutilizable por Player, IA, etc. */

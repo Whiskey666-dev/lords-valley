@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHUNK_TILES, WORLD_CHUNKS, tileToIso, isoToTile, ISO_TILE_W, ISO_TILE_H } from "../world/Terrain";
+import { CHUNK_TILES, WORLD_CHUNKS, isoToTile, addTileBody } from "../world/Terrain";
 import { getChunkTiles } from "../world/WorldTiles";
 
 /**
@@ -13,7 +13,7 @@ export class MineralPhysicsManager {
   private group: Phaser.Physics.Arcade.StaticGroup | null = null;
   private activeChunks = new Set<string>();
   private chunkObjects = new Map<string, Phaser.GameObjects.GameObject[]>();
-  private playerCollider: Phaser.Physics.Arcade.Collider | null = null;
+
   private npcColliders = new Map<string, Phaser.Physics.Arcade.Collider>();
   private lastCenterChunk = { x: -999, y: -999 };
 
@@ -47,7 +47,7 @@ export class MineralPhysicsManager {
   }
 
   /** Sincroniza colliders de minerales para los 3x3 chunks alrededor de la cámara. Throttle 512px. */
-  sync(camera: Phaser.Cameras.Scene2D.Camera, player?: Phaser.Physics.Arcade.Sprite, npcs?: Array<{ sprite: Phaser.Physics.Arcade.Sprite | null; id: string }>): void {
+  sync(camera: Phaser.Cameras.Scene2D.Camera, _player?: Phaser.Physics.Arcade.Sprite, npcs?: Array<{ sprite: Phaser.Physics.Arcade.Sprite | null; id: string }>): void {
     if (!this.group) return;
     const centerX = camera.scrollX + camera.width / 2;
     const centerY = camera.scrollY + camera.height / 2;
@@ -55,8 +55,7 @@ export class MineralPhysicsManager {
     const dist = Phaser.Math.Distance.Between(cx, cy, this.lastCenterChunk.x, this.lastCenterChunk.y);
     // Evita regenerar cada frame si no se movió de chunk
     if (dist < 1 && this.activeChunks.size > 0) {
-      // Aún así asegurar colliders de player/npcs nuevos
-      if (player) this.ensurePlayerCollider(player);
+      // Player usa CollisionMatrix; solo NPCs necesitan colisionador Arcade.
       if (npcs) this.ensureNpcColliders(npcs);
       return;
     }
@@ -88,7 +87,6 @@ export class MineralPhysicsManager {
       }
     }
 
-    if (player) this.ensurePlayerCollider(player);
     if (npcs) this.ensureNpcColliders(npcs);
   }
 
@@ -104,22 +102,7 @@ export class MineralPhysicsManager {
         if (gid < 30 || gid > 35) continue;
         const wx = cx * CHUNK_TILES + x;
         const wy = cy * CHUNK_TILES + y;
-        const iso = tileToIso(wx, wy);
-        // Centro del rombo = vértice norte + medio alto (sprites con origin 0.5)
-        const isoX = iso.x;
-        const isoY = iso.y + ISO_TILE_H/2;
-        // create en staticGroup en coords isométricas (centro del rombo)
-        const img = this.group.create(isoX, isoY, "mineral_pixel") as Phaser.Physics.Arcade.Image;
-        img.setDisplaySize(ISO_TILE_W/2, ISO_TILE_H/2);
-        img.setAlpha(0);
-        // Alpha 0 pero cuerpo colisionable; refreshBody para que el tamaño coincida con displaySize
-        if ((img as any).refreshBody) (img as any).refreshBody();
-        // Asegurar que el cuerpo sea del tamaño del tile
-        const body = img.body as Phaser.Physics.Arcade.StaticBody;
-        if (body) {
-          body.setSize(ISO_TILE_W/2, ISO_TILE_H/2);
-          body.updateFromGameObject();
-        }
+        const img = addTileBody(this.group, wx, wy, "mineral_pixel");
         objs.push(img);
       }
     }
@@ -137,11 +120,6 @@ export class MineralPhysicsManager {
     this.chunkObjects.delete(key);
   }
 
-  private ensurePlayerCollider(player: Phaser.Physics.Arcade.Sprite): void {
-    if (!this.group || !player) return;
-    if (this.playerCollider) return; // ya existe
-    this.playerCollider = this.scene.physics.add.collider(player, this.group);
-  }
 
   private ensureNpcColliders(npcs: Array<{ sprite: Phaser.Physics.Arcade.Sprite | null; id: string }>): void {
     if (!this.group) return;
@@ -166,10 +144,6 @@ export class MineralPhysicsManager {
   destroy(): void {
     for (const key of Array.from(this.chunkObjects.keys())) this.removeChunk(key);
     this.activeChunks.clear();
-    if (this.playerCollider) {
-      try { (this.scene.physics.world as any).removeCollider?.(this.playerCollider); } catch {}
-      this.playerCollider = null;
-    }
     this.npcColliders.clear();
     this.group?.clear(true, true);
     this.group?.destroy();

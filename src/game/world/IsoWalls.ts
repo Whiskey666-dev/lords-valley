@@ -42,14 +42,20 @@ export function southWall(topX: number, topY: number, dropPx: number): IsoPoint[
 
 
 /**
- * Regla de paso entre tiles con altura:
- * - Caminando: se puede subir como máximo 1 nivel.
- * - Saltando: se puede subir hasta 3 niveles.
- * - Bajar/caer siempre vale (incluso a pozos profundos).
+ * Regla canónica de paso entre tiles con altura o excavación (clicks [-8, +8]):
+ * - Desnivel de 0 clicks: suelo plano, paso libre.
+ * - Subir: caminando permite subir máximo 1 click (+1 rampa/escalón). A partir de +2 clicks es muro y bloquea a pie.
+ *   Saltando permite subir hasta +3 clicks. A partir de +4 clicks bloquea siempre.
+ * - Bajar: caminando permite descender máximo 1 click (-1 escalón). A partir de -2 clicks de excavado/caída
+ *   es precipicio/foso con pared en la base y bloquea a pie. Saltando permite descender hasta 3 clicks.
  */
 export function canStepHeight(hFrom: number, hTo: number, isJumping = false): boolean {
-  if (hTo <= hFrom) return true;
-  return hTo - hFrom <= (isJumping ? 3 : 1);
+  const diff = hTo - hFrom;
+  const maxClimb = isJumping ? 3 : 1;
+  const maxDrop = isJumping ? 3 : 1;
+  if (diff > maxClimb) return false;
+  if (-diff > maxDrop) return false;
+  return true;
 }
 
 /** Oscurece un hex por factor (0..1), con clamp por canal. */

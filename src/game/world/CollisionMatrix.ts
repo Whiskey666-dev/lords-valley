@@ -37,17 +37,16 @@ export class CollisionMatrix {
   }
 
   /**
-   * Hitbox exacta de contacto en los pies del personaje (sprite 48x64 centrado, centro de pies en Y + 14).
-   * Chequea la elipse de contacto simétrica en todas las caras (N, S, E, O, NE, NO, SE, SO).
+   * Hitbox de contacto centrada exactamente en los pies del personaje (elipse isométrica 2:1).
+   * Chequea la elipse de contacto simétrica en todas las caras (N, S, E, O).
    */
   isBodyBlockedAt(isoX: number, isoY: number): boolean {
-    const feetY = isoY + 14;
     return (
-      this.isBlockedIso(isoX, feetY) ||
-      this.isBlockedIso(isoX - 6, feetY) ||
-      this.isBlockedIso(isoX + 6, feetY) ||
-      this.isBlockedIso(isoX, feetY - 4) ||
-      this.isBlockedIso(isoX, feetY + 4)
+      this.isBlockedIso(isoX, isoY) ||
+      this.isBlockedIso(isoX - 6, isoY) ||
+      this.isBlockedIso(isoX + 6, isoY) ||
+      this.isBlockedIso(isoX, isoY - 3) ||
+      this.isBlockedIso(isoX, isoY + 3)
     );
   }
 

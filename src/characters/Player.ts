@@ -1,12 +1,13 @@
 import Phaser from "phaser";
 import { CombatSystem } from "../combat/CombatSystem";
-import { BaseHuman } from "./BaseHuman";
+import { BaseHuman, BASE_HUMAN_ORIGIN_Y } from "./BaseHuman";
 import type { Direction8 } from "./Animations";
 import * as InputSystem from "../game/systems/InputSystem";
 import { isGameInputBlocked } from "../ui/input/KeyBindings";
 import { collisionMatrix } from "../game/world/CollisionMatrix";
 import { isoToTile } from "../game/world/Terrain";
 import { getHeightFast, HEIGHT_STEP_PX } from "../game/world/TerrainHeight";
+import { canStepHeight } from "../game/world/IsoWalls";
 
 export class Player extends BaseHuman {
   private isJumping = false;
@@ -94,7 +95,7 @@ export class Player extends BaseHuman {
   private filterMovementByTerrain(xDir: number, yDir: number): { xDir: number; yDir: number } {
     if (xDir === 0 && yDir === 0) return { xDir, yDir };
 
-    const testDist = 8;
+    const testDist = 3; // 3px de lookahead para contacto suave sin vibración
     const nextX = this.x + xDir * testDist;
     const nextY = this.y + yDir * testDist;
 
@@ -126,17 +127,33 @@ export class Player extends BaseHuman {
 
   /**
    * Se puede pisar el destino:
-   * - Bajar/caer siempre se permite.
-   * - Caminando: subir como máximo 1 nivel (+1).
-   * - Saltando: subir hasta 3 niveles (+3).
-   * - Más de 3 niveles: bloqueado siempre.
+   * - Terreno nivelado (misma altura): permitido.
+   * - Subir 1 click (+1): permitido caminando (rampa/escalón).
+   * - Subir 2 o 3 clicks (+2..+3): solo saltando. A pie bloqueado (muro sólido).
+   * - Subir más de 3 clicks (+4..+8): bloqueado siempre.
+   * - Bajar 1 click (-1): permitido caminando (escalón).
+   * - Bajar 2 o más clicks (-2..-8): foso/excavación con muro en la base.
+   *   Caminando está bloqueado para no caer al precipicio; saltando permite descender hasta 3 clicks.
    */
   private canStepTo(toX: number, toY: number): boolean {
     const fromH = this.groundHeightAt(this.x, this.y);
-    const toH = this.groundHeightAt(toX, toY);
-    if (toH <= fromH) return true;
-    const maxClimb = this.isJumping ? 3 : 1;
-    return toH - fromH <= maxClimb;
+
+    // Muestreo simétrico en 2:1 sobre la elipse de contacto de los pies
+    const checkPoints = [
+      { x: toX, y: toY },
+      { x: toX - 6, y: toY },
+      { x: toX + 6, y: toY },
+      { x: toX, y: toY - 3 },
+      { x: toX, y: toY + 3 },
+    ];
+
+    for (const pt of checkPoints) {
+      const toH = this.groundHeightAt(pt.x, pt.y);
+      if (!canStepHeight(fromH, toH, this.isJumping)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -155,7 +172,7 @@ export class Player extends BaseHuman {
       this.visualRise += Math.sign(d) * Math.min(Math.abs(d), rate * dt);
     }
     const dispH = this.displayHeight > 0 ? this.displayHeight : 64;
-    this.setOrigin(0.5, 0.5 + (this.visualRise + this.jumpLift) / dispH);
+    this.setOrigin(0.5, BASE_HUMAN_ORIGIN_Y + (this.visualRise + this.jumpLift) / dispH);
   }
 
   updateEntity() {

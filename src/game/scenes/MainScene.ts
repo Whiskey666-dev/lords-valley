@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { Player } from "../../characters/Player";
+import { BASE_HUMAN_ORIGIN_Y } from "../../characters/BaseHuman";
 import { Survivor } from "../../characters/Survivor";
 import { DeadDragon, DEAD_DRAGON_ORDERS, COMPORTAMIENTOS, FUNCIONES, HABILIDAD_CATEGORIAS } from "../../characters/DeadDragon";
 import { initAllCharacterAnimations } from "../../characters/Animations";
@@ -311,7 +312,7 @@ export class MainScene extends Phaser.Scene {
     const spawn = getCenterSpawn(this);
     const isoSpawn = worldToIso(spawn.x, spawn.y);
     this.player = new Player(this, isoSpawn.x, isoSpawn.y + ISO_TILE_H/2);
-    this.player.setOrigin(0.5, 0.5);
+    this.player.setOrigin(0.5, BASE_HUMAN_ORIGIN_Y);
 
     try {
       if (collisionMatrix.isBlockedIso(this.player.x, this.player.y)) {

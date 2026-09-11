@@ -45,6 +45,51 @@ export function isoToWorld(isoX: number, isoY: number) {
 }
 
 /**
+ * Crea un cuerpo físico estático (Arcade) para un tile bloqueado.
+ *
+ * Geometría del rombo isométrico (ISO_TILE_W=64, ISO_TILE_H=32):
+ *   Vértice N  → (iso.x,        iso.y)          ← punto más alto
+ *   Vértice E/O→ (iso.x ± 32,  iso.y + 16)      ← vértices laterales
+ *   Vértice S  → (iso.x,        iso.y + 32)      ← punto más bajo (cara sur)
+ *
+ * El cuerpo (ISO_TILE_W/2 × ISO_TILE_H/2 = 32 × 16) se centra a 3/4 de la
+ * altura del rombo → ocupa [iso.y+16 .. iso.y+32].  El borde sur del cuerpo
+ * queda exactamente en el vértice sur visual, permitiendo que el personaje
+ * toque la pared sin atravesarla.
+ *
+ * @param group   StaticGroup de Phaser donde se añade el cuerpo
+ * @param wx      Tile world-X (columna)
+ * @param wy      Tile world-Y (fila)
+ * @param texture Clave de textura (puede ser invisible con setAlpha(0))
+ * @returns       El objeto creado (imagen con cuerpo estático)
+ */
+export function addTileBody(
+  group: Phaser.Physics.Arcade.StaticGroup,
+  wx: number,
+  wy: number,
+  texture: string
+): Phaser.Physics.Arcade.Image {
+  const iso = tileToIso(wx, wy);
+  // Centro del cuerpo físico coincidente al píxel con el centro del rombo base (iso.y + ISO_TILE_H / 2 = iso.y + 16)
+  const bodyX = iso.x;
+  const bodyY = iso.y + ISO_TILE_H / 2;
+  const bodyW = ISO_TILE_W / 2;   // 32 px
+  const bodyH = ISO_TILE_H / 2;   // 16 px
+
+  const img = group.create(bodyX, bodyY, texture) as Phaser.Physics.Arcade.Image;
+  img.setDisplaySize(bodyW, bodyH);
+  img.setAlpha(0);
+  if ((img as any).refreshBody) (img as any).refreshBody();
+  const body = img.body as Phaser.Physics.Arcade.StaticBody;
+  if (body) {
+    body.setSize(bodyW, bodyH);
+    body.updateFromGameObject();
+  }
+  return img;
+}
+
+
+/**
  * hash2i: hash visual determinista y sin estado para variaciones cosméticas
  * (p. ej. matices de césped en el minimapa). NO genera mundo: el terreno lo
  * sirve el backend (ver WorldTiles.ts). Rango [0, 1).
