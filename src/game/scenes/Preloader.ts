@@ -44,6 +44,9 @@ import jumpLeftUp from "../../assets/sprites/player/Jump - NEW/Normal/Jump_Left_
 import deadDragonIdle from "../../assets/sprites/dead dragon/idle.png";
 import deadDragonWalk from "../../assets/sprites/dead dragon/walk.png";
 
+// --- Ghost (96x96, 8 frames, 768x96 total) ---
+import ghostIdleSheet from "../../assets/sprites/ghost/ghostIdle.png";
+
 // --- Crop Spritesheets (29 cultivos x 64x64 px x 6 frames) ---
 import { CROPS_CATALOG } from "../farming/farmData";
 
@@ -126,6 +129,9 @@ export class Preloader extends Phaser.Scene {
     this.load.spritesheet("dead_dragon_idle_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet("dead_dragon_walk_sheet", deadDragonWalk, { frameWidth: 200, frameHeight: 200 });
     this.load.spritesheet("dead_dragon_sheet", deadDragonIdle, { frameWidth: 200, frameHeight: 200 });
+
+    // Ghost (8 frames de 96x96 en una tira horizontal 768x96)
+    this.load.spritesheet("ghost_idle", ghostIdleSheet, { frameWidth: 96, frameHeight: 96 });
 
     // Crop Sprites (29 cultivos, 6 frames de 64x64 cada uno)
     CROPS_CATALOG.forEach((crop) => {

@@ -76,11 +76,19 @@ export function useConsole() {
         setHistory(h => [...h.slice(-8), `→ ${detail.count} Dead Dragon ${fac} (total ${detail.total})`]);
       }
     };
+    const onGhostSpawned = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number; total: number }>).detail;
+      if (detail) {
+        setHistory(h => [...h.slice(-8), `→ ${detail.count} Ghost(s) (total ${detail.total})`]);
+      }
+    };
     window.addEventListener("phaser-npcs-spawned", onSpawned as EventListener);
     window.addEventListener("phaser-dead-dragons-spawned" as any, onDragonSpawned as EventListener);
+    window.addEventListener("phaser-ghosts-spawned" as any, onGhostSpawned as EventListener);
     return () => {
       window.removeEventListener("phaser-npcs-spawned", onSpawned as EventListener);
       window.removeEventListener("phaser-dead-dragons-spawned" as any, onDragonSpawned as EventListener);
+      window.removeEventListener("phaser-ghosts-spawned" as any, onGhostSpawned as EventListener);
     };
   }, []);
 
@@ -105,7 +113,13 @@ export function useConsole() {
 
     if (mode === "chat") {
       const l = trimmed.toLowerCase();
-      if (l.startsWith("createnpc") || l.startsWith("createdeaddragon")) {
+      if (
+        l.startsWith("createnpc") ||
+        l.startsWith("createdeaddragon") ||
+        l.startsWith("createghost") ||
+        l.startsWith("creative") ||
+        l.startsWith("survival")
+      ) {
         setFeedback("⚠️ Estás en modo Chat. Cambia a Consola para usar comandos.");
         setTimeout(() => setFeedback(null), 2500);
         return;
@@ -141,6 +155,38 @@ export function useConsole() {
       setHistory(h => [...h.slice(-8), `✓ ${count} Dead Dragon ${fac}`]);
       setInput("");
       setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
+    // — Comandos Ghost: createGhost1..3 / createGhost 1..3 / createGhost
+    const ghostMatch = lower.match(/^createghost\s*([1-3])?$/);
+    if (ghostMatch) {
+      const count = ghostMatch[1] ? parseInt(ghostMatch[1], 10) : 1;
+      window.dispatchEvent(new CustomEvent("phaser-create-ghosts" as any, { detail: { count } }));
+      setFeedback(`Creando ${count} Ghost(s) enemigo(s)...`);
+      setHistory(h => [...h.slice(-8), `✓ ${count} Ghost(s) creados`]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
+    // — Modo Creativo / Modo Supervivencia —
+    if (lower === "creativemode" || lower === "creative mode" || lower === "creative") {
+      (window as any).__CREATIVE_MODE__ = true;
+      (window as any).__GAME_MODE__ = "creative";
+      window.dispatchEvent(new CustomEvent("phaser-game-mode" as any, { detail: { mode: "creative" } }));
+      setFeedback("🎨 Modo Creativo activado: los enemigos ignoran al jugador.");
+      setHistory(h => [...h.slice(-8), "✓ CreativeMode activado"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+    if (lower === "survivalmode" || lower === "survival mode" || lower === "survival") {
+      (window as any).__CREATIVE_MODE__ = false;
+      (window as any).__GAME_MODE__ = "survival";
+      window.dispatchEvent(new CustomEvent("phaser-game-mode" as any, { detail: { mode: "survival" } }));
+      setFeedback("⚔️ Modo Supervivencia activado: los enemigos detectan y atacan al jugador.");
+      setHistory(h => [...h.slice(-8), "✓ SurvivalMode activado"]);
+      setInput("");
+      setTimeout(() => setFeedback(null), 3000);
       return;
     }
     // — Comandos Niebla de Guerra —
@@ -199,15 +245,23 @@ export function useConsole() {
       return;
     }
     if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | fog toggle/on/off/clear/reveal | fog radius <32-2000> | help");
+      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | createGhost1..3 | CreativeMode | SurvivalMode | fog toggle/on/off | fog radius <32-2000> | help");
       return;
     }
-    if (!lower.startsWith("createnpc") && !lower.startsWith("createdeaddragon") && !lower.startsWith("fog") && !lower.startsWith("niebla")) {
+    if (
+      !lower.startsWith("createnpc") &&
+      !lower.startsWith("createdeaddragon") &&
+      !lower.startsWith("createghost") &&
+      !lower.startsWith("creative") &&
+      !lower.startsWith("survival") &&
+      !lower.startsWith("fog") &&
+      !lower.startsWith("niebla")
+    ) {
       setFeedback("💬 Para chatear cambia a modo Chat");
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
-    setFeedback(`Comando no reconocido: ${trimmed} (usa createNpc1..10 | createDeadDragonA/E1..5 | fog help)`);
+    setFeedback(`Comando no reconocido: ${trimmed} (usa createGhost1..3 | CreativeMode | SurvivalMode | help)`);
     setTimeout(() => setFeedback(null), 2500);
   };
 

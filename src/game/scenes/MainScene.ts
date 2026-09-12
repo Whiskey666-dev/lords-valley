@@ -3,11 +3,12 @@ import { Player } from "../../characters/Player";
 import { BASE_HUMAN_ORIGIN_Y } from "../../characters/BaseHuman";
 import { Survivor } from "../../characters/Survivor";
 import { DeadDragon, DEAD_DRAGON_ORDERS, COMPORTAMIENTOS, FUNCIONES, HABILIDAD_CATEGORIAS } from "../../characters/DeadDragon";
+import { Ghost } from "../../characters/Ghost";
 import { initAllCharacterAnimations } from "../../characters/Animations";
 import { isGameInputBlocked, isActionJustDown } from "../../ui/input/KeyBindings";
 import * as InputSystem from "../systems/InputSystem";
 import { setupCamera, updateCamera } from "../systems/CameraSystem";
-import { getCenterSpawn, spawnNpcs, spawnDeadDragons } from "../systems/SpawnSystem";
+import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { CameraController } from "../systems/CameraController";
 import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_H } from "../world/Terrain";
@@ -21,11 +22,13 @@ import { TerrainOcclusionSystem } from "../systems/TerrainOcclusionSystem";
 import { savePlayerPos } from "../../app/api/player.api";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket } from "../../app/socket";
+import { SaveSystem } from "../../save/SaveSystem";
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
   private npcs: Survivor[] = [];
   private deadDragons: DeadDragon[] = [];
+  private ghosts: Ghost[] = [];
   private chatSystem!: ChatBubbleSystem;
   private cameraController!: CameraController;
   private chunkRenderer!: ChunkRenderer;
@@ -66,6 +69,8 @@ export class MainScene extends Phaser.Scene {
       this.spawnPlayer();
       this.setupNpcListeners();
       this.setupDeadDragonListeners();
+      this.setupGhostListeners();
+      this.restoreSavedGame();
       this.chatSystem = new ChatBubbleSystem(this);
       this.farmPlacementSystem = new FarmPlacementSystem(this);
       this.terrainEditSystem = new TerrainEditSystem(this);
@@ -99,6 +104,7 @@ export class MainScene extends Phaser.Scene {
       const count = detail?.count ?? 1;
       spawnNpcs(this, count, this.player, this.npcs);
       this.npcs.slice(-count).forEach(n => { if (n.sprite) this.dynamicLayer.add(n.sprite as any); });
+      this.saveFullGameState();
     };
 
     const onFocusNpc = (e: Event) => {
@@ -138,6 +144,7 @@ export class MainScene extends Phaser.Scene {
       const isAlly = detail?.isAlly ?? true;
       spawnDeadDragons(this, count, isAlly, this.player as unknown as Phaser.GameObjects.GameObject & { x: number; y: number }, this.deadDragons, this.npcs);
       this.deadDragons.slice(-count).forEach(d => { if (d.sprite) this.dynamicLayer.add(d.sprite as any); });
+      this.saveFullGameState();
     };
 
     const onFocusDragon = (e: Event) => {
@@ -302,6 +309,121 @@ export class MainScene extends Phaser.Scene {
     };
   }
 
+  // ── Ghost listeners + comandos de consola createGhost1/2/3 ────────────────
+  private setupGhostListeners(): void {
+    const onSpawnGhosts = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number }>).detail;
+      const count = detail?.count ?? 1;
+      const prevLen = this.ghosts.length;
+      spawnGhosts(this, count, this.player as unknown as Phaser.GameObjects.GameObject & { x: number; y: number }, this.ghosts, this.npcs);
+      // Añadir a DynamicLayer solo los ghosts nuevos (usando diff de longitud)
+      for (let i = prevLen; i < this.ghosts.length; i++) {
+        const g = this.ghosts[i];
+        if (g.sprite) {
+          this.dynamicLayer.add(g.sprite as any);
+          console.log(`[MainScene] Ghost ${g.id} añadido a DynamicLayer en (${g.sprite.x.toFixed(0)}, ${g.sprite.y.toFixed(0)})`);
+        }
+      }
+      this.saveFullGameState();
+    };
+
+    const onGhostDied = () => {
+      this.ghosts = this.ghosts.filter(g => g.estaVivo);
+      this.saveFullGameState();
+    };
+
+    window.addEventListener('phaser-create-ghosts' as any, onSpawnGhosts as EventListener);
+    window.addEventListener('phaser-ghost-died' as any, onGhostDied as EventListener);
+
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('phaser-create-ghosts' as any, onSpawnGhosts as EventListener);
+      window.removeEventListener('phaser-ghost-died' as any, onGhostDied as EventListener);
+      this.ghosts.forEach(g => g.desinstanciarSprite());
+      this.ghosts = [];
+      // Limpiar comandos de consola
+      delete (window as any).createGhost;
+      delete (window as any).createGhost1;
+      delete (window as any).createGhost2;
+      delete (window as any).createGhost3;
+      delete (window as any).ghosts;
+      delete (window as any).__GHOSTS__;
+      delete (window as any).__GHOST_API__;
+      delete (window as any).__GHOSTS_POS__;
+      delete (window as any).__GHOST_COUNT__;
+      delete (window as any).CreativeMode;
+      delete (window as any).SurvivalMode;
+      delete (window as any).saveGame;
+      delete (window as any).clearSave;
+      window.removeEventListener('phaser-game-mode' as any, onGameMode as EventListener);
+    });
+
+    const onGameMode = (e: Event) => {
+      const detail = (e as CustomEvent<{ mode: 'creative' | 'survival' }>).detail;
+      const isCreative = detail?.mode === 'creative';
+      (window as any).__CREATIVE_MODE__ = isCreative;
+      (window as any).__GAME_MODE__ = isCreative ? 'creative' : 'survival';
+      console.log(`[MainScene] Modo de juego cambiado a: ${isCreative ? 'CREATIVO (Enemigos ignoran al jugador)' : 'SUPERVIVENCIA (Enemigos hostiles)'}`);
+      this.saveFullGameState();
+    };
+    window.addEventListener('phaser-game-mode' as any, onGameMode as EventListener);
+
+    // Estado inicial por defecto
+    if (typeof (window as any).__CREATIVE_MODE__ === 'undefined') {
+      (window as any).__CREATIVE_MODE__ = false;
+      (window as any).__GAME_MODE__ = 'survival';
+    }
+
+    // Comandos de consola y F12: CreativeMode / SurvivalMode
+    (window as any).CreativeMode = () => {
+      (window as any).__CREATIVE_MODE__ = true;
+      (window as any).__GAME_MODE__ = 'creative';
+      window.dispatchEvent(new CustomEvent('phaser-game-mode' as any, { detail: { mode: 'creative' } }));
+      return '🎨 Modo Creativo activado: los enemigos ignoran al jugador';
+    };
+    (window as any).SurvivalMode = () => {
+      (window as any).__CREATIVE_MODE__ = false;
+      (window as any).__GAME_MODE__ = 'survival';
+      window.dispatchEvent(new CustomEvent('phaser-game-mode' as any, { detail: { mode: 'survival' } }));
+      return '⚔️ Modo Supervivencia activado: los enemigos detectan al jugador';
+    };
+
+    // Comandos de guardado manual
+    (window as any).saveGame = () => {
+      this.saveFullGameState();
+      return '💾 Partida guardada exitosamente (NPCs, dragones, ghosts, modo de juego).';
+    };
+    (window as any).clearSave = () => {
+      SaveSystem.clear();
+      return '🗑️ Guardado eliminado. Al refrescar iniciarás de cero.';
+    };
+
+    // Comandos de consola y F12: createGhost, createGhost1, createGhost2, createGhost3
+    const dispatchGhost = (count: number) => {
+      console.log(`[MainScene] Invocando ${count} Ghost(s)...`);
+      window.dispatchEvent(new CustomEvent('phaser-create-ghosts' as any, { detail: { count } }));
+      return `✓ ${count} Ghost(s) invocado(s)`;
+    };
+
+    (window as any).createGhost = (n = 1) => dispatchGhost(n);
+    (window as any).createGhost1 = () => dispatchGhost(1);
+    (window as any).createGhost2 = () => dispatchGhost(2);
+    (window as any).createGhost3 = () => dispatchGhost(3);
+    (window as any).ghosts = this.ghosts;
+    (window as any).__GHOSTS__ = this.ghosts;
+
+    // API interna para debug F12
+    (window as any).__GHOST_API__ = {
+      spawn: (n = 1) => dispatchGhost(n),
+      list: () => this.ghosts.map(g => g.getPaqueteUI()),
+      kill: (id: string) => {
+        const ghost = this.ghosts.find(g => g.id === id);
+        if (ghost) ghost.recibirDano(9999);
+      },
+    };
+
+    console.log('[MainScene] Ghost listeners OK. Comandos: createGhost1, createGhost2, createGhost3 | CreativeMode | SurvivalMode | saveGame | clearSave');
+  }
+
   private setupWorld(): void {
     this.physics.world.setBounds(0, 0, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
     this.cameras.main.setBackgroundColor("#111a11");
@@ -327,8 +449,18 @@ export class MainScene extends Phaser.Scene {
     this.dynamicLayer?.add(this.player as any);
 
     console.log("[MainScene] Player spawneado en", this.player.x.toFixed(0), this.player.y.toFixed(0));
-    this.time.addEvent({ delay: 5000, loop: true, callback: () => this.savePlayerPos() });
-    window.addEventListener('beforeunload', () => this.savePlayerPos());
+    this.time.addEvent({
+      delay: 5000,
+      loop: true,
+      callback: () => {
+        this.savePlayerPos();
+        this.saveFullGameState();
+      },
+    });
+    window.addEventListener('beforeunload', () => {
+      this.savePlayerPos();
+      this.saveFullGameState();
+    });
   }
 
   private savePlayerPos() {
@@ -341,6 +473,110 @@ export class MainScene extends Phaser.Scene {
       if (!playerId) return;
       savePlayerPos(playerId, { x, y }).catch(() => {});
     } catch {}
+  }
+
+  private saveFullGameState(): void {
+    try {
+      const playerPos = this.player ? { x: this.player.x, y: this.player.y } : undefined;
+      const gameMode = (window as any).__CREATIVE_MODE__ ? 'creative' : 'survival';
+      SaveSystem.saveGameState(playerPos, this.npcs, this.deadDragons, this.ghosts, gameMode);
+    } catch (e) {
+      console.warn('[MainScene] Error al guardar partida completa', e);
+    }
+  }
+
+  private restoreSavedGame(): void {
+    try {
+      const save = SaveSystem.load();
+      if (!save) {
+        console.log('[MainScene] No se encontró partida guardada previa. Iniciando partida nueva.');
+        return;
+      }
+
+      console.log(
+        `[MainScene] 💾 Restaurando partida guardada (${new Date(save.timestamp).toLocaleTimeString()}): ` +
+        `${save.npcs.length} NPCs, ${save.deadDragons.length} Dead Dragons, ${save.ghosts.length} Ghosts, modo=${save.gameMode}`
+      );
+
+      // Restaurar modo de juego
+      const isCreative = save.gameMode === 'creative';
+      (window as any).__CREATIVE_MODE__ = isCreative;
+      (window as any).__GAME_MODE__ = save.gameMode;
+
+      // Restaurar posición del jugador si existe y es válida
+      if (save.playerPos && this.player && typeof save.playerPos.x === 'number' && typeof save.playerPos.y === 'number') {
+        this.player.setPosition(save.playerPos.x, save.playerPos.y);
+        if (this.cameraFollow) {
+          this.cameras.main.centerOn(save.playerPos.x, save.playerPos.y);
+        }
+      }
+
+      // Restaurar NPCs (Survivors)
+      for (const data of save.npcs) {
+        const surv = new Survivor();
+        surv.id = data.id;
+        surv.nombre = data.nombre;
+        surv.edad = data.edad;
+        surv.profesion = data.profesion;
+        surv.stats.salud = data.salud;
+        surv.stats.maxSalud = data.maxSalud;
+        surv.stats.energia = data.energia;
+        if (typeof data.hambre === 'number') surv.needs.hambre = data.hambre;
+        if (typeof data.sed === 'number') surv.needs.sed = data.sed;
+        if (typeof data.sueno === 'number') surv.needs.sueno = data.sueno;
+        if (typeof data.lealtad === 'number') surv.loyalty.nivel = data.lealtad;
+
+        surv.instanciarSprite(this, data.x, data.y);
+        this.npcs.push(surv);
+        if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
+      }
+      if (save.npcs.length > 0) {
+        window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: save.npcs.length, total: this.npcs.length } }));
+      }
+
+      // Restaurar Dead Dragons
+      for (const data of save.deadDragons) {
+        const dragon = new DeadDragon(data.isAlly, data.x, data.y);
+        dragon.id = data.id;
+        dragon.nombre = data.nombre;
+        dragon.stats.salud = data.salud;
+        dragon.stats.maxSalud = data.maxSalud;
+        dragon.stats.energia = data.energia;
+        dragon.stats.maxEnergia = data.maxEnergia;
+        if (data.hogar) dragon.setHogar(data.hogar.x, data.hogar.y);
+        if (data.comportamiento) dragon.setComportamiento(data.comportamiento as any);
+        if (data.funcion) dragon.setFuncion(data.funcion as any);
+        dragon.instanciarSprite(this, data.x, data.y);
+        this.deadDragons.push(dragon);
+        if (dragon.sprite) this.dynamicLayer.add(dragon.sprite as any);
+      }
+      if (save.deadDragons.length > 0) {
+        window.dispatchEvent(new CustomEvent('phaser-dead-dragons-spawned' as any, {
+          detail: { count: save.deadDragons.length, total: this.deadDragons.length, isAlly: true }
+        }));
+      }
+
+      // Restaurar Ghosts
+      for (const data of save.ghosts) {
+        const ghost = new Ghost();
+        ghost.id = data.id;
+        ghost.nombre = data.nombre;
+        ghost.homeX = data.homeX ?? data.x;
+        ghost.homeY = data.homeY ?? data.y;
+        ghost.salud = data.salud;
+        ghost.maxSalud = data.maxSalud;
+        ghost.energia = data.energia;
+        ghost.maxEnergia = data.maxEnergia;
+        ghost.instanciarSprite(this, data.x, data.y);
+        this.ghosts.push(ghost);
+        if (ghost.sprite) this.dynamicLayer.add(ghost.sprite as any);
+      }
+      if (save.ghosts.length > 0) {
+        window.dispatchEvent(new CustomEvent('phaser-ghosts-spawned' as any, { detail: { count: save.ghosts.length, total: this.ghosts.length } }));
+      }
+    } catch (e) {
+      console.warn('[MainScene] Error al restaurar partida guardada', e);
+    }
   }
 
   private setupRTSOverlay(): void {
@@ -455,6 +691,12 @@ export class MainScene extends Phaser.Scene {
       }
       this.npcs.forEach(n => n.updateEntity());
       this.deadDragons.forEach(d => d.updateEntity());
+      this.ghosts = this.ghosts.filter(g => g.estaVivo);
+      this.ghosts.forEach(g => g.updateEntity(
+        this.player as unknown as Phaser.Physics.Arcade.Sprite,
+        this.npcs,
+        delta
+      ));
       this.chatSystem.update(this.player);
       if (this.terrainOcclusionSystem && this.player) {
         this.terrainOcclusionSystem.update(this.player);
@@ -465,6 +707,9 @@ export class MainScene extends Phaser.Scene {
       (window as any).__NPCS_POS__ = npcPositionsBlocked;
       const dragonPositionsBlocked = this.deadDragons.filter(d => d.sprite && d.sprite.active).map(d => ({ ...d.getPaqueteUI(), x: d.sprite!.x, y: d.sprite!.y }));
       (window as any).__DEAD_DRAGONS_POS__ = dragonPositionsBlocked;
+      const ghostPositionsBlocked = this.ghosts.filter(g => g.sprite && g.sprite.active).map(g => ({ ...g.getPaqueteUI(), x: g.sprite!.x, y: g.sprite!.y }));
+      (window as any).__GHOSTS_POS__ = ghostPositionsBlocked;
+      (window as any).__GHOST_COUNT__ = this.ghosts.length;
       return;
     }
     if (InputSystem.isCloseJustPressed(this)) {
@@ -492,6 +737,24 @@ export class MainScene extends Phaser.Scene {
     (window as any).__NPCS_POS__ = npcPositions;
 
     this.deadDragons.forEach(d => d.updateEntity());
+
+    // Actualizar Ghosts: IA de patrulla/persecución/ataque (delta ya viene del parámetro update)
+    this.ghosts = this.ghosts.filter(g => g.estaVivo); // limpiar muertos
+    this.ghosts.forEach(g => g.updateEntity(
+      this.player as unknown as Phaser.Physics.Arcade.Sprite,
+      this.npcs,
+      delta
+    ));
+    const ghostPositions = this.ghosts
+      .filter(g => g.sprite && g.sprite.active)
+      .map(g => ({
+        ...g.getPaqueteUI(),
+        x: g.sprite!.x,
+        y: g.sprite!.y,
+      }));
+    (window as any).__GHOSTS_POS__ = ghostPositions;
+    (window as any).__GHOST_COUNT__ = this.ghosts.length;
+
     const dragonPositions = this.deadDragons
       .filter(d => d.sprite && d.sprite.active)
       .map(d => ({

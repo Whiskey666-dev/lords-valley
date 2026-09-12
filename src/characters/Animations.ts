@@ -251,6 +251,30 @@ export function registerHumanAnimations(
 }
 
 // ---------------------------------------------------------------------------
+// Ghost - animación fantasmal independiente (no es humano)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registra la animación de idle del Ghost (8 frames, 10fps, loop).
+ * Requiere que el Preloader haya cargado "ghost_idle" como spritesheet 96x96.
+ */
+export function registerGhostAnimations(scene: Phaser.Scene) {
+  if (!scene.anims.exists('ghost_idle')) {
+    if (scene.textures.exists('ghost_idle')) {
+      scene.anims.create({
+        key: 'ghost_idle',
+        frames: scene.anims.generateFrameNumbers('ghost_idle', { start: 0, end: 7 }),
+        frameRate: 8,
+        repeat: -1,
+      });
+      console.log('[Animations] ✓ ghost_idle registrada (8 frames, 8fps, loop)');
+    } else {
+      console.warn('[Animations] Textura ghost_idle no encontrada, animación no registrada.');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Inicializador maestro - escalable, llamar una vez en MainScene.create()
 // ---------------------------------------------------------------------------
 
@@ -264,6 +288,9 @@ export function initAllCharacterAnimations(scene: Phaser.Scene) {
   registerHumanAnimations(scene, "npc_", "npc_");
   // Compat legacy para código que usa "npc_walk_" etc. ya cubierto arriba, extra para attack sin guión
   createCombatAnimations(scene, "npc_attack_", "npc_dash_", "player_dash_");
+
+  // Ghost - enemigo fantasmal con animación propia
+  registerGhostAnimations(scene);
 
   // Ejemplo escalable: descomenta para añadir nuevo humano con sus propias texturas
   // Preloader: load "villager_walk_down" etc.

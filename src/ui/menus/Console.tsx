@@ -98,7 +98,7 @@ export function Console() {
             // @ts-ignore
             if (e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
           }}
-          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "createNpc1..10 | createDeadDragonA1..5 / E1..5 | ENTER ejecutar, ESC cerrar"}
+          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "createGhost1..3 | CreativeMode | SurvivalMode | createNpc1..10 | ENTER ejecutar"}
           style={{
             flex: 1,
             background: "#1a1a1a",
@@ -148,7 +148,7 @@ export function Console() {
             <div key={i} style={{ opacity: 0.7 }}>{h}</div>
           ))}
           <div style={{ color: "#666" }}>
-            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: createNpc5 | createDeadDragonA3 (aliado) / createDeadDragonE2 (enemigo) | fog toggle"}
+            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: createGhost1 | CreativeMode | SurvivalMode | createNpc5 | fog toggle"}
           </div>
         </div>
       )}
