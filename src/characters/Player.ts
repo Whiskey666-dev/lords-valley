@@ -64,8 +64,17 @@ export class Player extends BaseHuman {
       if (dir === "up") vy = -1;
       if (dir === "down") vy = 1;
       if (dir === "left") vx = -1;
-      if (dir === "right") vy = 1;
+      if (dir === "right") vx = 1;
     }
+    
+    // Ajuste isométrico 2:1
+    vy = vy * 0.5;
+    const len = Math.hypot(vx, vy);
+    if (len > 0) {
+      vx /= len;
+      vy /= len;
+    }
+
     const dashDist = dashSpeed * (dashDuration / 1000);
     const steps = Math.max(1, Math.ceil(dashDist / 16));
     for (let i = 1; i <= steps; i++) {
@@ -75,6 +84,7 @@ export class Player extends BaseHuman {
     }
     this.isDashing = true;
     const body = this.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(vx * dashSpeed, vy * dashSpeed); // fix: faltaba setVelocity para que el dash mueva al player
     this.playDash(this.lastDirection);
     this.scene.time.delayedCall(dashDuration, () => {
       this.isDashing = false;
@@ -206,9 +216,15 @@ export class Player extends BaseHuman {
       const jumpSpeed = 110; // Reducido a la mitad (era 220)
       let { xDir, yDir } = InputSystem.getMovementVector(this.scene);
       ({ xDir, yDir } = this.filterMovementByTerrain(xDir, yDir));
-      if (xDir !== 0) body.setVelocityX(xDir * jumpSpeed);
-      if (yDir !== 0) body.setVelocityY(yDir * jumpSpeed);
-      if (body.velocity.x !== 0 && body.velocity.y !== 0) body.velocity.normalize().scale(jumpSpeed);
+      
+      if (xDir !== 0 || yDir !== 0) {
+        let vx = xDir;
+        let vy = yDir * 0.5; // Ajuste isométrico 2:1
+        const length = Math.hypot(vx, vy);
+        body.setVelocityX((vx / length) * jumpSpeed);
+        body.setVelocityY((vy / length) * jumpSpeed);
+      }
+      
       const dir = (xDir !== 0 || yDir !== 0) ? (InputSystem.getDirection(this.scene) as Direction8 | "") : "";
       if (dir !== "") this.lastDirection = dir as Direction8;
       return;
@@ -245,10 +261,14 @@ export class Player extends BaseHuman {
       dir = recalculated as typeof dir;
     }
 
-    if (xDir !== 0) body.setVelocityX(xDir * speed);
-    if (yDir !== 0) body.setVelocityY(yDir * speed);
-    if (body.velocity.x !== 0 && body.velocity.y !== 0) {
-      body.velocity.normalize().scale(speed);
+    if (xDir !== 0 || yDir !== 0) {
+      let vx = xDir;
+      let vy = yDir * 0.5; // Ajuste isométrico 2:1
+      const length = Math.hypot(vx, vy);
+      body.setVelocityX((vx / length) * speed);
+      body.setVelocityY((vy / length) * speed);
+    } else {
+      body.setVelocity(0);
     }
 
     if (dir !== "") {
