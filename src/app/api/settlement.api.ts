@@ -13,6 +13,8 @@ export interface SettlementDto {
   currentYear: number;
   season: string;
   weather: string;
+  /** Modo de juego autoritativo del servidor — usar esto, no window.__CREATIVE_MODE__ */
+  gameMode: 'creative' | 'survival';
   worldSeed?: string | null;
   worldState?: any | null;
   survivors: any[];
@@ -64,5 +66,41 @@ export async function fetchChunksBulk(chunks: { x: number; y: number }[], seed?:
   if (chunks.length === 0) return [];
   if (chunks.length === 1) return [await fetchChunk(chunks[0].x, chunks[0].y, seed)];
   const { data } = await api.post(`/map/chunks/generate`, { chunks: chunks.map(c => ({ chunkX: c.x, chunkY: c.y })), ...(seed ? { seed } : {}) }, { timeout: 30000 });
+  return data;
+}
+
+/**
+ * Solicita al servidor generar NPCs con IDs UUID reales y stats canónicos.
+ * Reemplaza el uso de `new Survivor()` con Math.random() en el cliente.
+ * El settlement retornado tendrá los nuevos survivors en su array.
+ */
+export async function spawnSurvivors(settlementId: string, count = 1): Promise<SettlementDto> {
+  const { data } = await api.post<SettlementDto>(`/settlements/${settlementId}/survivors/spawn`, { count });
+  return data;
+}
+
+/**
+ * Agrega recursos al inventario con validación server-side.
+ * El servidor valida tipo de recurso y capacidad — el cliente no puede hacer trampa.
+ */
+export async function addToInventory(
+  settlementId: string,
+  resourceType: string,
+  quantity: string,
+): Promise<{ ok: boolean; newQuantity: string; reason?: string }> {
+  const { data } = await api.post(`/settlements/${settlementId}/inventory/add`, { resourceType, quantity });
+  return data;
+}
+
+/**
+ * Establece el modo de juego en el servidor.
+ * El cliente DEBE llamar este endpoint en lugar de modificar window.__CREATIVE_MODE__ directamente.
+ * Los Ghosts consultan este valor en el servidor al decidir si atacar al jugador.
+ */
+export async function setGameMode(
+  settlementId: string,
+  mode: 'creative' | 'survival',
+): Promise<{ gameMode: string }> {
+  const { data } = await api.patch(`/settlements/${settlementId}/game-mode`, { mode });
   return data;
 }

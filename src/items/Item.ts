@@ -76,6 +76,11 @@ export const ITEM_POOLS: Record<ItemCategory, string[]> = {
   "Documentos": ["Mapa Antiguo", "Carta", "Contrato", "Diario", "Plano"],
 };
 
+/**
+ * @deprecated Solo para modo demo/desarrollo offline sin backend conectado.
+ * En producción, el inventario del jugador y asentamiento es persistido y validado por el backend
+ * (GET /settlements/:id -> data.inventory).
+ */
 export function createMockPlayerInventory(): PlayerInventoryItem[] {
   const items: PlayerInventoryItem[] = [];
   const makeCantidad = (categoria: ItemCategory) =>

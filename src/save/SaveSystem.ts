@@ -135,12 +135,14 @@ export class SaveSystem {
 
   /**
    * Guarda de forma completa el estado actual de la partida.
+   * SEGURIDAD: Los Ghosts (enemigos en combate) NO se guardan en localStorage para evitar
+   * trampas en la vida/stats y desincronización con el CombatGateway autoritativo del backend.
    */
   public static saveGameState(
     playerPos: { x: number; y: number } | undefined,
     npcs: Survivor[],
     deadDragons: DeadDragon[],
-    ghosts: Ghost[],
+    _ghosts: Ghost[],
     gameMode: "creative" | "survival" = "survival"
   ): boolean {
     const saveObj: GameSaveData = {
@@ -150,7 +152,8 @@ export class SaveSystem {
       playerPos: playerPos ? { x: Math.round(playerPos.x), y: Math.round(playerPos.y) } : undefined,
       npcs: npcs.map(n => SaveSystem.serializeSurvivor(n)).filter(Boolean) as SurvivorSaveData[],
       deadDragons: deadDragons.map(d => SaveSystem.serializeDeadDragon(d)).filter(Boolean) as DeadDragonSaveData[],
-      ghosts: ghosts.filter(g => g.estaVivo).map(g => SaveSystem.serializeGhost(g)).filter(Boolean) as GhostSaveData[],
+      // Los Ghosts son autoritativos del servidor en tiempo real; no se serializan localmente
+      ghosts: [],
     };
 
     return SaveSystem.save(saveObj);

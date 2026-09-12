@@ -50,6 +50,63 @@ export class Survivor {
     private static readonly NOMBRES = ["Aldous", "Goffrey", "Eldric", "Wulfric", "Rowena", "Gisela", "Brom", "Yara", "Cedric", "Mira", "Hob", "Edda", "Joren", "Lysa", "Tormund", "Svala"];
     private static readonly PROFESIONES = ["Leñador", "Minero", "Granjero", "Cazador", "Carpintero", "Herrero", "Médico", "Explorador", "Guardia", "Cocinero"];
 
+    /**
+     * Crea un Survivor desde datos autoritativos del servidor.
+     * Usar este método en lugar del constructor vacío para evitar datos aleatorios en el cliente.
+     * @param serverData - Datos del survivor retornados por POST /settlements/:id/survivors/spawn
+     */
+    public static fromServerData(serverData: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        age: number;
+        professions?: Array<{ type: string }>;
+        needs?: { hunger?: number; thirst?: number; fatigue?: number; health?: number; sanity?: number };
+        attributes?: { strength?: number; agility?: number; endurance?: number; intelligence?: number };
+        loyalty?: number;
+        positionX?: number;
+        positionY?: number;
+        inventory?: any[];
+    }): Survivor {
+        const surv = new Survivor();
+        surv.id = serverData.id;
+        surv.nombre = `${serverData.firstName} ${serverData.lastName}`;
+        surv.edad = serverData.age;
+        surv.profesion = serverData.professions?.[0]?.type
+            ? Survivor.mapBackendProfession(serverData.professions[0].type)
+            : surv.profesion;
+        // Sincronizar stats y needs desde datos del servidor (sobrescribe los aleatorios del constructor)
+        if (serverData.attributes) {
+            surv.stats.maxSalud = 80 + (serverData.attributes.strength ?? 10) * 2;
+            surv.stats.salud = surv.stats.maxSalud;
+            surv.stats.energia = 70 + (serverData.attributes.endurance ?? 10) * 2;
+        }
+        if (serverData.needs) {
+            surv.needs.hambre = serverData.needs.hunger ?? 0;
+            surv.needs.sed = serverData.needs.thirst ?? 0;
+            surv.needs.sueno = serverData.needs.fatigue ?? 0;
+        }
+        if (typeof serverData.loyalty === 'number') {
+            surv.loyalty.nivel = serverData.loyalty;
+        }
+        return surv;
+    }
+
+    /** Mapea tipos de profesión del backend al nombre legible en español del frontend */
+    private static mapBackendProfession(type: string): string {
+        const map: Record<string, string> = {
+            LENADOR: 'Leñador', MINERO: 'Minero', AGRICULTOR: 'Granjero',
+            HERRERO: 'Herrero', SOLDADO: 'Guardia', MEDICO: 'Médico',
+            CARPINTERO: 'Carpintero', COMERCIANTE: 'Explorador',
+            CAZADOR: 'Cazador', COCINERO: 'Cocinero',
+        };
+        return map[type] ?? type;
+    }
+
+    /**
+     * @deprecated Solo para desarrollo local / restauración de partida guardada.
+     * En producción, usar Survivor.fromServerData() para garantizar que los datos vienen del servidor.
+     */
     constructor() {
         this.id = "surv_" + Math.random().toString(36).substring(2, 7);
         this.nombre = Survivor.NOMBRES[Math.floor(Math.random() * Survivor.NOMBRES.length)];

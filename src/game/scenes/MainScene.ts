@@ -8,7 +8,7 @@ import { initAllCharacterAnimations } from "../../characters/Animations";
 import { isGameInputBlocked, isActionJustDown } from "../../ui/input/KeyBindings";
 import * as InputSystem from "../systems/InputSystem";
 import { setupCamera, updateCamera } from "../systems/CameraSystem";
-import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts } from "../systems/SpawnSystem";
+import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts, requestServerGhostSpawn, initCombatSocket } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { CameraController } from "../systems/CameraController";
 import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_H } from "../world/Terrain";
@@ -20,8 +20,9 @@ import { FarmPlacementSystem } from "../systems/FarmPlacementSystem";
 import { TerrainEditSystem } from "../systems/TerrainEditSystem";
 import { TerrainOcclusionSystem } from "../systems/TerrainOcclusionSystem";
 import { savePlayerPos } from "../../app/api/player.api";
+import { setGameMode as apiSetGameMode } from "../../app/api/settlement.api";
 import { useGameStore } from "../../app/store/useGameStore";
-import { getSocket } from "../../app/socket";
+import { getSocket, getCombatSocket } from "../../app/socket";
 import { SaveSystem } from "../../save/SaveSystem";
 
 export class MainScene extends Phaser.Scene {
@@ -42,6 +43,8 @@ export class MainScene extends Phaser.Scene {
   private lastViewportEmit = 0;
   private lastCameraX = 0;
   private lastCameraY = 0;
+  /** ID del settlement actual — requerido para operaciones server-side (ghost spawn, game mode) */
+  private settlementId: string | null = null;
 
   constructor() { super("MainScene"); }
 
@@ -311,21 +314,71 @@ export class MainScene extends Phaser.Scene {
 
   // ── Ghost listeners + comandos de consola createGhost1/2/3 ────────────────
   private setupGhostListeners(): void {
+    // ── Listener para spawn de ghosts desde UI (delega al servidor) ──
     const onSpawnGhosts = (e: Event) => {
+      const detail = (e as CustomEvent<{ count: number }>).detail;
+      const count = detail?.count ?? 1;
+      // Solicitar al servidor en lugar de generar localmente
+      requestServerGhostSpawn(count, this.settlementId ?? undefined);
+    };
+
+    // ── Listener 'ghost:spawned' del servidor (WebSocket /combat namespace) ──
+    // El servidor genera IDs UUID y stats canónicos; el cliente crea el sprite de rendering.
+    const combatSock = getCombatSocket();
+    combatSock.on('ghost:spawned', (data: { ghosts: any[]; settlementId: string }) => {
+      if (!data?.ghosts) return;
+      for (const ghostData of data.ghosts) {
+        const ghost = Ghost.fromServerData(ghostData);
+        const spawnX = ghostData.positionX ?? this.player?.x ?? 3072;
+        const spawnY = ghostData.positionY ?? this.player?.y ?? 3072;
+        ghost.instanciarSprite(this, spawnX, spawnY);
+        this.ghosts.push(ghost);
+        if (ghost.sprite) {
+          this.dynamicLayer?.add(ghost.sprite as any);
+          console.log(`[MainScene] Ghost ${ghost.id} [server] en (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
+        }
+      }
+      window.dispatchEvent(new CustomEvent("phaser-ghosts-spawned" as any, {
+        detail: { count: data.ghosts.length, total: this.ghosts.length }
+      }));
+      this.saveFullGameState();
+    });
+
+    // ── Listener 'ghost:died' del servidor ──
+    combatSock.on('ghost:died', (data: { ghostId: string }) => {
+      this.ghosts = this.ghosts.filter(g => g.id !== data.ghostId || g.estaVivo);
+      this.saveFullGameState();
+    });
+
+    // ── Listener 'player:damage_result' — daño solo se aplica si el servidor lo confirma ──
+    combatSock.on('player:damage_result', (result: { applied: boolean; amount: number; targetId: string; rejectedReason?: string }) => {
+      if (!result.applied) {
+        if (result.rejectedReason && result.rejectedReason !== 'creative_mode') {
+          console.warn('[MainScene] Daño rechazado por servidor:', result.rejectedReason);
+        }
+        (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: false, pendingServerConfirmation: false };
+        return;
+      }
+      if (this.player && typeof (this.player as any).recibirDano === 'function') {
+        (this.player as any).recibirDano(result.amount);
+      }
+      (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, amount: result.amount, pendingServerConfirmation: false };
+      console.log(`[MainScene] Daño confirmado por servidor: ${result.amount}`);
+    });
+
+    // ── Fallback local para spawn sin settlementId (offline/debug) ──
+    const onSpawnGhostsLocal = (e: Event) => {
       const detail = (e as CustomEvent<{ count: number }>).detail;
       const count = detail?.count ?? 1;
       const prevLen = this.ghosts.length;
       spawnGhosts(this, count, this.player as unknown as Phaser.GameObjects.GameObject & { x: number; y: number }, this.ghosts, this.npcs);
-      // Añadir a DynamicLayer solo los ghosts nuevos (usando diff de longitud)
       for (let i = prevLen; i < this.ghosts.length; i++) {
         const g = this.ghosts[i];
-        if (g.sprite) {
-          this.dynamicLayer.add(g.sprite as any);
-          console.log(`[MainScene] Ghost ${g.id} añadido a DynamicLayer en (${g.sprite.x.toFixed(0)}, ${g.sprite.y.toFixed(0)})`);
-        }
+        if (g.sprite) this.dynamicLayer.add(g.sprite as any);
       }
       this.saveFullGameState();
     };
+    window.addEventListener('phaser-create-ghosts-local' as any, onSpawnGhostsLocal as EventListener);
 
     const onGhostDied = () => {
       this.ghosts = this.ghosts.filter(g => g.estaVivo);
@@ -337,10 +390,13 @@ export class MainScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener('phaser-create-ghosts' as any, onSpawnGhosts as EventListener);
+      window.removeEventListener('phaser-create-ghosts-local' as any, onSpawnGhostsLocal as EventListener);
       window.removeEventListener('phaser-ghost-died' as any, onGhostDied as EventListener);
+      combatSock.off('ghost:spawned');
+      combatSock.off('ghost:died');
+      combatSock.off('player:damage_result');
       this.ghosts.forEach(g => g.desinstanciarSprite());
       this.ghosts = [];
-      // Limpiar comandos de consola
       delete (window as any).createGhost;
       delete (window as any).createGhost1;
       delete (window as any).createGhost2;
@@ -359,49 +415,43 @@ export class MainScene extends Phaser.Scene {
 
     const onGameMode = (e: Event) => {
       const detail = (e as CustomEvent<{ mode: 'creative' | 'survival' }>).detail;
-      const isCreative = detail?.mode === 'creative';
-      (window as any).__CREATIVE_MODE__ = isCreative;
-      (window as any).__GAME_MODE__ = isCreative ? 'creative' : 'survival';
-      console.log(`[MainScene] Modo de juego cambiado a: ${isCreative ? 'CREATIVO (Enemigos ignoran al jugador)' : 'SUPERVIVENCIA (Enemigos hostiles)'}`);
+      if (!detail?.mode) return;
+      // Delegar al servidor — el servidor es la autoridad del gameMode
+      if (this.settlementId) {
+        apiSetGameMode(this.settlementId, detail.mode)
+          .then(() => console.log(`[MainScene] Modo de juego guardado en servidor: ${detail.mode}`))
+          .catch((err) => console.warn('[MainScene] Error al guardar modo en servidor:', err));
+      }
+      (window as any).__GAME_MODE__ = detail.mode;
+      console.log(`[MainScene] Modo: ${detail.mode}`);
       this.saveFullGameState();
     };
     window.addEventListener('phaser-game-mode' as any, onGameMode as EventListener);
 
-    // Estado inicial por defecto
-    if (typeof (window as any).__CREATIVE_MODE__ === 'undefined') {
-      (window as any).__CREATIVE_MODE__ = false;
-      (window as any).__GAME_MODE__ = 'survival';
-    }
+    // Estado inicial: leer desde store (datos del servidor)
+    const storeSettlement = (useGameStore as any).getState?.()?.settlement;
+    const initialMode = storeSettlement?.gameMode ?? 'survival';
+    (window as any).__GAME_MODE__ = initialMode;
+    console.log(`[MainScene] Modo inicial (servidor): ${initialMode}`);
 
-    // Comandos de consola y F12: CreativeMode / SurvivalMode
+    // Comandos de consola — llaman al servidor vía PATCH /game-mode
     (window as any).CreativeMode = () => {
-      (window as any).__CREATIVE_MODE__ = true;
-      (window as any).__GAME_MODE__ = 'creative';
+      if (!this.settlementId) return '⚠️ Sin settlementId';
       window.dispatchEvent(new CustomEvent('phaser-game-mode' as any, { detail: { mode: 'creative' } }));
-      return '🎨 Modo Creativo activado: los enemigos ignoran al jugador';
+      return '🎨 Modo Creativo solicitado al servidor';
     };
     (window as any).SurvivalMode = () => {
-      (window as any).__CREATIVE_MODE__ = false;
-      (window as any).__GAME_MODE__ = 'survival';
+      if (!this.settlementId) return '⚠️ Sin settlementId';
       window.dispatchEvent(new CustomEvent('phaser-game-mode' as any, { detail: { mode: 'survival' } }));
-      return '⚔️ Modo Supervivencia activado: los enemigos detectan al jugador';
+      return '⚔️ Modo Supervivencia solicitado al servidor';
     };
 
-    // Comandos de guardado manual
-    (window as any).saveGame = () => {
-      this.saveFullGameState();
-      return '💾 Partida guardada exitosamente (NPCs, dragones, ghosts, modo de juego).';
-    };
-    (window as any).clearSave = () => {
-      SaveSystem.clear();
-      return '🗑️ Guardado eliminado. Al refrescar iniciarás de cero.';
-    };
+    (window as any).saveGame = () => { this.saveFullGameState(); return '💾 Partida guardada.'; };
+    (window as any).clearSave = () => { SaveSystem.clear(); return '🗑️ Guardado eliminado.'; };
 
-    // Comandos de consola y F12: createGhost, createGhost1, createGhost2, createGhost3
     const dispatchGhost = (count: number) => {
-      console.log(`[MainScene] Invocando ${count} Ghost(s)...`);
       window.dispatchEvent(new CustomEvent('phaser-create-ghosts' as any, { detail: { count } }));
-      return `✓ ${count} Ghost(s) invocado(s)`;
+      return `✓ ${count} Ghost(s) solicitados al servidor`;
     };
 
     (window as any).createGhost = (n = 1) => dispatchGhost(n);
@@ -410,18 +460,13 @@ export class MainScene extends Phaser.Scene {
     (window as any).createGhost3 = () => dispatchGhost(3);
     (window as any).ghosts = this.ghosts;
     (window as any).__GHOSTS__ = this.ghosts;
-
-    // API interna para debug F12
     (window as any).__GHOST_API__ = {
       spawn: (n = 1) => dispatchGhost(n),
       list: () => this.ghosts.map(g => g.getPaqueteUI()),
-      kill: (id: string) => {
-        const ghost = this.ghosts.find(g => g.id === id);
-        if (ghost) ghost.recibirDano(9999);
-      },
+      kill: (id: string) => { const g = this.ghosts.find(g => g.id === id); if (g) g.recibirDano(9999); },
     };
 
-    console.log('[MainScene] Ghost listeners OK. Comandos: createGhost1, createGhost2, createGhost3 | CreativeMode | SurvivalMode | saveGame | clearSave');
+    console.log('[MainScene] Ghost listeners OK (servidor). Comandos: createGhost1/2/3 | CreativeMode | SurvivalMode | saveGame | clearSave');
   }
 
   private setupWorld(): void {
@@ -469,7 +514,9 @@ export class MainScene extends Phaser.Scene {
       const x = Math.round(this.player.x), y = Math.round(this.player.y);
       if (Math.hypot(x - this.lastSavePos.x, y - this.lastSavePos.y) < 10) return;
       this.lastSavePos = { x, y };
-      const playerId = localStorage.getItem('playerId') || (useGameStore as any).getState?.().settlement?.ownerId;
+      // Obtener playerId desde el store (datos del servidor) — no desde localStorage (hackeable)
+      const playerId = (useGameStore as any).getState?.().settlement?.ownerId
+        ?? (useGameStore as any).getState?.().playerId;
       if (!playerId) return;
       savePlayerPos(playerId, { x, y }).catch(() => {});
     } catch {}
@@ -478,7 +525,8 @@ export class MainScene extends Phaser.Scene {
   private saveFullGameState(): void {
     try {
       const playerPos = this.player ? { x: this.player.x, y: this.player.y } : undefined;
-      const gameMode = (window as any).__CREATIVE_MODE__ ? 'creative' : 'survival';
+      // Leer gameMode desde __GAME_MODE__ (seteado por el servidor) — no desde __CREATIVE_MODE__ (hackeable)
+      const gameMode = ((window as any).__GAME_MODE__ ?? 'survival') as 'creative' | 'survival';
       SaveSystem.saveGameState(playerPos, this.npcs, this.deadDragons, this.ghosts, gameMode);
     } catch (e) {
       console.warn('[MainScene] Error al guardar partida completa', e);
@@ -498,10 +546,17 @@ export class MainScene extends Phaser.Scene {
         `${save.npcs.length} NPCs, ${save.deadDragons.length} Dead Dragons, ${save.ghosts.length} Ghosts, modo=${save.gameMode}`
       );
 
-      // Restaurar modo de juego
-      const isCreative = save.gameMode === 'creative';
-      (window as any).__CREATIVE_MODE__ = isCreative;
-      (window as any).__GAME_MODE__ = save.gameMode;
+      // Restaurar modo de juego — usar datos del servidor como fuente de verdad
+      // Si el store tiene el gameMode del servidor, usarlo. Si no, usar el guardado local como fallback.
+      const storeSettlement = (useGameStore as any).getState?.()?.settlement;
+      const serverGameMode: string = storeSettlement?.gameMode ?? save.gameMode ?? 'survival';
+      (window as any).__GAME_MODE__ = serverGameMode;
+      console.log(`[MainScene] Modo de juego restaurado desde servidor: ${serverGameMode}`);
+
+      // Inicializar combat socket con el settlementId
+      if (this.settlementId) {
+        initCombatSocket(this.settlementId);
+      }
 
       // Restaurar posición del jugador si existe y es válida
       if (save.playerPos && this.player && typeof save.playerPos.x === 'number' && typeof save.playerPos.y === 'number') {
@@ -511,26 +566,38 @@ export class MainScene extends Phaser.Scene {
         }
       }
 
-      // Restaurar NPCs (Survivors)
-      for (const data of save.npcs) {
-        const surv = new Survivor();
-        surv.id = data.id;
-        surv.nombre = data.nombre;
-        surv.edad = data.edad;
-        surv.profesion = data.profesion;
-        surv.stats.salud = data.salud;
-        surv.stats.maxSalud = data.maxSalud;
-        surv.stats.energia = data.energia;
-        if (typeof data.hambre === 'number') surv.needs.hambre = data.hambre;
-        if (typeof data.sed === 'number') surv.needs.sed = data.sed;
-        if (typeof data.sueno === 'number') surv.needs.sueno = data.sueno;
-        if (typeof data.lealtad === 'number') surv.loyalty.nivel = data.lealtad;
+      // Restaurar NPCs (Survivors): Prioridad 1: Servidor (autoridad total), Prioridad 2: save.npcs local fallback
+      if (storeSettlement?.survivors && Array.isArray(storeSettlement.survivors) && storeSettlement.survivors.length > 0) {
+        console.log(`[MainScene] 🛡️ Restaurando ${storeSettlement.survivors.length} NPCs autoritativos desde el backend...`);
+        for (const sData of storeSettlement.survivors) {
+          const localCache = save.npcs?.find((n: any) => n.id === sData.id);
+          const posX = localCache?.x ?? (sData.positionX ?? 0);
+          const posY = localCache?.y ?? (sData.positionY ?? 0);
+          const surv = Survivor.fromServerData(sData);
+          surv.instanciarSprite(this, posX, posY);
+          this.npcs.push(surv);
+          if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
+        }
+        window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: this.npcs.length, total: this.npcs.length } }));
+      } else if (save.npcs && save.npcs.length > 0) {
+        for (const data of save.npcs) {
+          const surv = new Survivor();
+          surv.id = data.id;
+          surv.nombre = data.nombre;
+          surv.edad = data.edad;
+          surv.profesion = data.profesion;
+          surv.stats.salud = data.salud;
+          surv.stats.maxSalud = data.maxSalud;
+          surv.stats.energia = data.energia;
+          if (typeof data.hambre === 'number') surv.needs.hambre = data.hambre;
+          if (typeof data.sed === 'number') surv.needs.sed = data.sed;
+          if (typeof data.sueno === 'number') surv.needs.sueno = data.sueno;
+          if (typeof data.lealtad === 'number') surv.loyalty.nivel = data.lealtad;
 
-        surv.instanciarSprite(this, data.x, data.y);
-        this.npcs.push(surv);
-        if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
-      }
-      if (save.npcs.length > 0) {
+          surv.instanciarSprite(this, data.x, data.y);
+          this.npcs.push(surv);
+          if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
+        }
         window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: save.npcs.length, total: this.npcs.length } }));
       }
 
@@ -556,24 +623,9 @@ export class MainScene extends Phaser.Scene {
         }));
       }
 
-      // Restaurar Ghosts
-      for (const data of save.ghosts) {
-        const ghost = new Ghost();
-        ghost.id = data.id;
-        ghost.nombre = data.nombre;
-        ghost.homeX = data.homeX ?? data.x;
-        ghost.homeY = data.homeY ?? data.y;
-        ghost.salud = data.salud;
-        ghost.maxSalud = data.maxSalud;
-        ghost.energia = data.energia;
-        ghost.maxEnergia = data.maxEnergia;
-        ghost.instanciarSprite(this, data.x, data.y);
-        this.ghosts.push(ghost);
-        if (ghost.sprite) this.dynamicLayer.add(ghost.sprite as any);
-      }
-      if (save.ghosts.length > 0) {
-        window.dispatchEvent(new CustomEvent('phaser-ghosts-spawned' as any, { detail: { count: save.ghosts.length, total: this.ghosts.length } }));
-      }
+      // SEGURIDAD: Los Ghosts NO se restauran desde localStorage.
+      // Los Ghosts son enemigos sincronizados en tiempo real mediante el CombatGateway del backend.
+      // Esto previene que un jugador modifique su vida/cantidad o reviva enemigos muertos via devtools.
     } catch (e) {
       console.warn('[MainScene] Error al restaurar partida guardada', e);
     }

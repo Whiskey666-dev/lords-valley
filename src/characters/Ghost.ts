@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Survivor } from './Survivor';
-import { ISO_TILE_H, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, isoToTile, isBlockedTile } from '../game/world/Terrain';
+import { ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, isoToTile, isBlockedTile } from '../game/world/Terrain';
+import { reportPlayerAttacked, updateGhostPosition } from '../app/socket';
 
 // ─── Constantes del Ghost ────────────────────────────────────────────────────
 export const GHOST_MAX_SALUD = 600;
@@ -141,8 +142,10 @@ export class Ghost {
   public id: string;
   public nombre = "Ghost";
   public sprite: GhostSprite | null = null;
+  /** ID del settlement al que pertenece este ghost (asignado por el servidor) */
+  public settlementId: string | null = null;
 
-  // Stats
+  // Stats — sincronizados con el servidor via 'ghost:damage_result'
   public salud: number = GHOST_MAX_SALUD;
   public maxSalud: number = GHOST_MAX_SALUD;
   public energia: number = GHOST_MAX_ENERGIA;
@@ -155,11 +158,40 @@ export class Ghost {
   // IA
   private isDead = false;
   private lastAttackTime = 0;
+  /** Timestamp de la última vez que reportamos posición al servidor */
+  private lastPositionReport = 0;
   private patrolTarget: { x: number; y: number } | null = null;
   private patrolChangeAt = 0;
 
   constructor() {
     this.id = 'ghost_' + Math.random().toString(36).substring(2, 7);
+  }
+
+  /**
+   * Crea un Ghost con datos autoritativos del servidor.
+   * Usar cuando el servidor emite 'ghost:spawned' con el estado canónico.
+   * @param serverData - GhostStateDto retornado por el servidor
+   */
+  public static fromServerData(serverData: {
+    id: string;
+    hp: number;
+    maxHp: number;
+    energia: number;
+    maxEnergia: number;
+    positionX: number;
+    positionY: number;
+    settlementId?: string;
+  }): Ghost {
+    const ghost = new Ghost();
+    ghost.id = serverData.id;
+    ghost.salud = serverData.hp;
+    ghost.maxSalud = serverData.maxHp;
+    ghost.energia = serverData.energia;
+    ghost.maxEnergia = serverData.maxEnergia;
+    ghost.homeX = serverData.positionX;
+    ghost.homeY = serverData.positionY;
+    if (serverData.settlementId) ghost.settlementId = serverData.settlementId;
+    return ghost;
   }
 
   // ── Instanciar ─────────────────────────────────────────────────────────────
@@ -199,6 +231,13 @@ export class Ghost {
     // Reproducir animación idle si no está corriendo
     this.sprite.playGhostIdle();
 
+    // Reportar posición al servidor cada 500ms para validaciones de distancia
+    const now = Date.now();
+    if (now - this.lastPositionReport > 500 && this.sprite) {
+      updateGhostPosition(this.id, this.sprite.x, this.sprite.y);
+      this.lastPositionReport = now;
+    }
+
     // IA
     const target = this.findClosestTarget(player, survivors);
     if (target) {
@@ -223,10 +262,12 @@ export class Ghost {
     let closest: { x: number; y: number; entity: any } | null = null;
     let closestDist = GHOST_DETECTION_RANGE;
 
-    const isCreative = (window as any).__CREATIVE_MODE__ === true;
-
-    // En Modo Creativo los enemigos NO detectan al jugador
-    if (!isCreative && player && player.active) {
+    // El modo creativo ya NO se controla con window.__CREATIVE_MODE__.
+    // El servidor es la autoridad: cuando el ghost reporta un ataque via WebSocket,
+    // el servidor rechaza el daño si gameMode === 'creative'.
+    // El ghost sigue detectando y persiguiendo visualmente (para UX), pero el daño
+    // solo se aplica cuando el servidor lo confirma.
+    if (player && player.active) {
       const d = Phaser.Math.Distance.Between(sx, sy, player.x, player.y);
       if (d <= GHOST_DETECTION_RANGE) {
         closestDist = d;
@@ -271,30 +312,42 @@ export class Ghost {
 
   private tryAttack(targetEntity: any) {
     if (!this.sprite?.scene) return;
-    const isCreative = (window as any).__CREATIVE_MODE__ === true;
-    const isPlayer = targetEntity && (targetEntity.constructor?.name === "Player" || targetEntity === (window as any).__PLAYER_REF__);
-    if (isCreative && isPlayer) return;
 
     const now = this.sprite.scene.time.now;
     if (now - this.lastAttackTime < GHOST_ATTACK_COOLDOWN) return;
 
     this.lastAttackTime = now;
-    this.energia = Math.max(0, this.energia - 5);
 
-    // Flash rojo
+    // Flash de ataque (visual — siempre se muestra independiente del resultado del servidor)
     this.sprite.setTint(0xff4444);
     this.sprite.scene.time.delayedCall(200, () => {
       if (this.sprite?.active) this.sprite.setTint(0xaaddff);
     });
 
-    // Infligir daño al objetivo
-    if (targetEntity) {
-      if (typeof targetEntity.recibirDano === 'function') {
-        targetEntity.recibirDano(15);
-      } else if (targetEntity.stats && typeof targetEntity.stats.recibirDano === 'function') {
-        targetEntity.stats.recibirDano(15);
-      }
-      (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, time: now };
+    // SEGURIDAD: El daño ya NO se aplica directamente en el cliente.
+    // En cambio, reportamos el intento de ataque al servidor via WebSocket.
+    // El servidor valida (modo creativo, distancia, cooldown) y decide si aplicar el daño.
+    // El cliente aplica el daño SOLO cuando recibe 'player:damage_result' con applied=true.
+    if (targetEntity && this.sprite) {
+      const isPlayer = targetEntity.constructor?.name === "Player" || targetEntity === (window as any).__PLAYER_REF__;
+      const targetId: string = isPlayer
+        ? ((window as any).__PLAYER_ID__ ?? 'player')
+        : (targetEntity.id ?? 'unknown');
+
+      const settlementId: string = this.settlementId ?? ((window as any).__SETTLEMENT_ID__ ?? '');
+
+      reportPlayerAttacked({
+        ghostId: this.id,
+        targetId,
+        ghostX: this.sprite.x,
+        ghostY: this.sprite.y,
+        targetX: targetEntity.x ?? 0,
+        targetY: targetEntity.y ?? 0,
+        settlementId,
+      });
+
+      // El daño se aplicará en el listener de 'player:damage_result' en MainScene
+      (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, time: now, ghostId: this.id, pendingServerConfirmation: true };
     }
   }
 
