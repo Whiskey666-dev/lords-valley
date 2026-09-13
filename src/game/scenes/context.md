@@ -19,7 +19,7 @@
 
 ## `MainScene.ts`
 - `class MainScene extends Phaser.Scene("MainScene")`
-- **Campos**: `player`, `npcs[]`, `chatSystem`, `chunkRenderer`, `cameraController`, `cameraFollow`, `lastViewportEmit`, `farmPlacementSystem`, `fogOfWarSystem`
+- **Campos**: `player`, `npcs[]`, `chatSystem`, `chunkRenderer`, `cameraController`, `cameraFollow`, `lastViewportEmit`, `farmPlacementSystem`
 
 **`create()` — 8 pasos**:
 1. `setupWorld`: bounds `6144×6144`, grid Graphics `64px #333333` depth -20
@@ -29,7 +29,7 @@
 5. `new ChatBubbleSystem(scene)`
 6. `setupCamera`: bounds + CameraSystem + CameraController
 7. `setupRTSOverlay`: ChunkRenderer 3×3 + listeners `minimap-goto/world`
-8. `new FarmPlacementSystem(scene)` + `new FogOfWarSystem(scene)`
+8. `new FarmPlacementSystem(scene)`
 
 **`update()` — cada frame**:
 - Toggle `cameraFollow` con tecla Y

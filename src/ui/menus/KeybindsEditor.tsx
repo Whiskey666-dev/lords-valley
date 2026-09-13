@@ -23,14 +23,12 @@ export function KeybindsEditor() {
               <span style={{ fontSize: 12, color: '#ccc' }}>{info.label} <span style={{ fontSize: 9, color: '#666' }}>({info.category})</span> {isChanged && <span style={{ color: '#6f6', fontSize: 10 }}>•</span>}</span>
               <button
                 onClick={() => setEditing(isEditing ? null : action)}
-                disabled={action === "interact"}
                 style={{
                   minWidth: 86, padding: '3px 8px', borderRadius: 6,
                   border: isEditing ? '1px solid #ffd66b' : isChanged ? '1px solid #6f6' : '1px solid #3a3a3a',
                   background: isEditing ? '#332a00' : isChanged ? '#1e3322' : '#222',
                   color: isEditing ? '#ffd66b' : isChanged ? '#6f6' : '#fff',
-                  fontSize: 11, fontWeight: 600, cursor: action === "interact" ? 'default' : 'pointer',
-                  opacity: action === "interact" ? 0.7 : 1
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 }}
               >
                 {isEditing ? '...' : displayKey(pending[action])}

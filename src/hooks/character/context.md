@@ -5,7 +5,7 @@
 ## Hooks
 
 ### `useNpcPanel.ts`
-- Estado: `activeTab` (estado/atributos/profesiones/inventario)
+- Estado: `activeTab` (estado/atributos/profesiones)
 - Cierra con Escape
 - Datos derivados: `loyaltyPct`, `healthPct`, barras de necesidades
 - No despacha eventos — solo consume `NpcPanelData` del prop

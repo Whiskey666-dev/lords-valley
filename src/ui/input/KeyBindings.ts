@@ -20,7 +20,6 @@ export type GameAction =
   | "map"
   | "missions"
   | "stats"
-  | "interact"
   | "close"
   | "cameraFollow";
 
@@ -40,11 +39,10 @@ export const BINDING_INFOS: Record<GameAction, BindingInfo> = {
   dash:       { label: "Dash / Esquiva",    category: "Acción",     defaultKey: "SHIFT", description: "dash_*" },
   attack:    { label: "Ataque",            category: "Combate",    defaultKey: "F",     description: "player_attack_*" },
   attackAlt: { label: "Ataque Alt",        category: "Combate",    defaultKey: "Q",     description: "player_attack_* alt" },
-  inventory: { label: "Inventario",        category: "Sistema",    defaultKey: "I",     description: "Abrir inventario (placeholder)" },
-  map:       { label: "Mapa",              category: "Sistema",    defaultKey: "M",     description: "Abrir mapa (placeholder)" },
-  missions: { label: "Misiones",          category: "Sistema",    defaultKey: "J",     description: "Abrir misiones (placeholder)" },
-  stats:     { label: "Estadísticas",      category: "Sistema",    defaultKey: "P",     description: "Abrir stats (placeholder)" },
-  interact: { label: "Interactuar",       category: "Acción",     defaultKey: "LEFT_CLICK", description: "Click izq entorno/NPC" },
+  inventory: { label: "Inventario",        category: "Sistema",    defaultKey: "I",     description: "Abrir inventario" },
+  map:       { label: "Mapa",              category: "Sistema",    defaultKey: "M",     description: "Abrir mapa" },
+  missions: { label: "Misiones",          category: "Sistema",    defaultKey: "J",     description: "Abrir misiones" },
+  stats:     { label: "Estadísticas",      category: "Sistema",    defaultKey: "P",     description: "Abrir personaje" },
   close:     { label: "Cerrar / Deseleccionar", category: "Sistema", defaultKey: "ESC", description: "Cerrar paneles" },
   cameraFollow: { label: "Cámara Seguir",  category: "Sistema",    defaultKey: "Y",     description: "Alternar seguir personaje / libre mouse" },
 };
@@ -117,10 +115,6 @@ export function setInventoryOpen(value: boolean) {
     pressedKeys.clear();
     justPressedKeys.clear();
   }
-}
-
-export function isInventoryOpenActive(): boolean {
-  return isInventoryOpen;
 }
 
 export function setRebinding(value: boolean) {

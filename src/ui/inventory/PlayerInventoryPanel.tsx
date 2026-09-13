@@ -23,6 +23,9 @@ export function PlayerInventoryPanel({ onClose }: Props) {
     availableSlotsCount,
     lockedSlotsCount,
     maxSlotsCount,
+    loading,
+    error,
+    refresh,
   } = usePlayerInventory(onClose);
 
   return (
@@ -59,6 +62,18 @@ export function PlayerInventoryPanel({ onClose }: Props) {
 
       {/* Equipados */}
       <EquippedSlotsGrid />
+
+      {loading && items.length === 0 && (
+        <div style={{ fontSize: 10, color: '#8ab4ff', textAlign: 'center' }}>⏳ Cargando inventario del servidor…</div>
+      )}
+      {error && (
+        <div style={{ fontSize: 10, color: '#ff7a7a', textAlign: 'center', background: '#1a0f0f', border: '1px solid #3a1a1a', borderRadius: 6, padding: '6px 8px' }}>
+          {error}{' '}
+          <button onClick={() => void refresh()} style={{ background: '#1e2a3a', color: '#8ab4ff', border: '1px solid #4a90e2', borderRadius: 5, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }}>
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* Filtro desplegable superior */}
       <InventoryCategoryFilter

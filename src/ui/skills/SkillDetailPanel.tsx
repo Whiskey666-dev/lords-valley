@@ -1,15 +1,68 @@
+import { useEffect, useState } from "react";
 import type { SkillCategoryInfo, SkillInfo } from "../../hooks/skills/skillsData";
+import {
+  PLAYER_INVENTORY_EVENT,
+  countTrainingScrolls,
+  refreshPlayerInventory,
+  subscribePlayerInventory,
+} from "../../hooks/inventory/playerInventoryStore";
+import {
+  TRAINING_XP,
+  getTrainingScrollName,
+} from "../../items/TrainingScrolls";
 
 interface Props {
   category: SkillCategoryInfo;
   skills: SkillInfo[];
   progress: { avg: number; total: number; unlocked: number; maxed: number };
   onClose: () => void;
-  onAddXp: (skillId: string, amount?: number) => void;
-  onAddCategoryXp: (amount?: number) => void;
+  onTrainSkill: (skillId: string) => Promise<string | null>;
+  onTrainSchool: () => Promise<string | null>;
 }
 
-export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp, onAddCategoryXp }: Props) {
+export function SkillDetailPanel({ category, skills, progress, onClose, onTrainSkill, onTrainSchool }: Props) {
+  const schoolId = category.id;
+  const scrollName = getTrainingScrollName(schoolId);
+  const [scrolls, setScrolls] = useState(() => countTrainingScrolls(schoolId));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    const refresh = () => setScrolls(countTrainingScrolls(schoolId));
+    refresh();
+    const unsub = subscribePlayerInventory(refresh);
+    window.addEventListener(PLAYER_INVENTORY_EVENT, refresh);
+    void refreshPlayerInventory().then(refresh);
+    return () => {
+      unsub();
+      window.removeEventListener(PLAYER_INVENTORY_EVENT, refresh);
+    };
+  }, [schoolId]);
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(null), 3500);
+  };
+
+  const handleTrainSchool = () => {
+    if (busy) return;
+    setBusy("school");
+    void onTrainSchool().then((err) => {
+      setBusy(null);
+      flash(err ?? `⚡ +${TRAINING_XP} XP en ${category.label} (validado por el servidor).`);
+    });
+  };
+
+  const handleTrainSkill = (skillId: string) => {
+    if (busy) return;
+    setBusy(skillId);
+    void onTrainSkill(skillId).then((err) => {
+      setBusy(null);
+      flash(err ?? `⚡ +${TRAINING_XP} XP (validado por el servidor).`);
+    });
+  };
+
+  const canTrain = scrolls > 0;
   return (
     <div
       style={{
@@ -146,57 +199,74 @@ export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp,
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, color: "#88a2b8" }}>
             <span style={{ fontWeight: 700, color: "#b0c4d8" }}>{skills.length} habilidades</span>
             <span style={{ color: "#334455" }}>•</span>
-            <span>Tier 1 básico · Tier 2 avanzado · Tier 3 maestro</span>
+            <span>Tier 1 · 0% inicial</span>
+            <span style={{ color: "#334455" }}>•</span>
+            <span title={scrollName} style={{ fontWeight: 800, color: canTrain ? "#ffd54f" : "#8a6a2a" }}>
+              📜 x{scrolls}
+            </span>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button
-              onClick={() => onAddCategoryXp(4)}
+              onClick={handleTrainSchool}
+              disabled={!canTrain || busy !== null}
               style={{
-                background: category.color,
-                color: category.id === "artes_misticas" ? "#1a1200" : "#0a0a0a",
-                border: `1px solid ${category.color}`,
+                background: !canTrain ? "#0f1418" : category.color,
+                color: !canTrain ? "#3a4a5a" : category.id === "artes_misticas" ? "#1a1200" : "#0a0a0a",
+                border: `1px solid ${!canTrain ? "#1a2632" : category.color}`,
                 borderRadius: 5,
                 padding: "4px 10px",
                 fontSize: 10,
                 fontWeight: 800,
-                cursor: "pointer",
+                cursor: !canTrain || busy !== null ? "default" : "pointer",
+                opacity: !canTrain || busy !== null ? 0.6 : 1,
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
               }}
-              title="Entrena todas las habilidades desbloqueadas de esta categoría"
+              title={canTrain ? `El servidor consume 1 ${scrollName} y da +${TRAINING_XP} XP a la escuela` : `Necesitas un ${scrollName}. Consola: addItem:Pergamino/<Escuela>1..9`}
             >
-              ⚡ Entrenar (+4 XP)
+              {busy === "school" ? "⏳…" : `⚡ Entrenar (+${TRAINING_XP} XP) 📜 x${scrolls}`}
             </button>
           </div>
         </div>
+        {notice && (
+          <div style={{ background: "#1e1508", borderBottom: "1px solid #3a2a0a", color: "#ffd54f", fontSize: 9, padding: "5px 12px", textAlign: "center" }}>
+            {notice}
+          </div>
+        )}
+        {!canTrain && (
+          <div style={{ background: "#0a0f16", borderBottom: "1px solid #162434", color: "#8a9aab", fontSize: 8.5, padding: "5px 12px", textAlign: "center" }}>
+            📜 Sin pergaminos de {category.label}. Abre la consola y usa <b>addItem:Pergamino/&lt;Escuela&gt;1..9</b> (ej: addItem:Pergamino/Survival5). Cada Entrenar consume 1.
+          </div>
+        )}
 
         {/* Body grid */}
         <div className="skd-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: 10, background: "#0a121c", minHeight: 0 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
             {skills.map((sk) => {
               const pct = sk.level; // 0-100
-              const canTrain = sk.unlocked;
+              const isUnlocked = sk.unlocked;
+              const canTrainSkill = isUnlocked && canTrain && sk.level < 100;
               const tierColor = sk.tier === 3 ? "#ffd54f" : sk.tier === 2 ? "#42a5f5" : "#5a7a94";
               const tierLabel = sk.tier === 3 ? "Maestro" : sk.tier === 2 ? "Avanzado" : "Básico";
               return (
                 <div
                   key={sk.id}
                   style={{
-                    background: canTrain ? "#0d1824" : "#0b1017",
-                    border: `1px solid ${canTrain ? "#1a2c40" : "#141c26"}`,
+                    background: isUnlocked ? "#0d1824" : "#0b1017",
+                    border: `1px solid ${isUnlocked ? "#1a2c40" : "#141c26"}`,
                     borderRadius: 7,
                     padding: "8px 9px",
                     display: "flex",
                     flexDirection: "column",
                     gap: 6,
-                    opacity: canTrain ? 1 : 0.72,
+                    opacity: isUnlocked ? 1 : 0.72,
                     position: "relative",
                     overflow: "hidden",
                   }}
                 >
                   {/* brillo superior */}
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: canTrain ? category.color : "#1a2632", opacity: 0.9 }} />
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: isUnlocked ? category.color : "#1a2632", opacity: 0.9 }} />
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     <div
@@ -204,34 +274,34 @@ export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp,
                         width: 30,
                         height: 30,
                         borderRadius: 6,
-                        background: canTrain ? category.color : "#121a24",
-                        color: canTrain ? (category.id === "artes_misticas" ? "#1a1200" : "#0a0a0a") : "#3a4a5a",
-                        border: `1px solid ${canTrain ? category.color : "#1a2632"}`,
+                        background: isUnlocked ? category.color : "#121a24",
+                        color: isUnlocked ? (category.id === "artes_misticas" ? "#1a1200" : "#0a0a0a") : "#3a4a5a",
+                        border: `1px solid ${isUnlocked ? category.color : "#1a2632"}`,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: 15,
                         flexShrink: 0,
-                        boxShadow: canTrain ? `0 0 8px ${category.glow}` : "none",
+                        boxShadow: isUnlocked ? `0 0 8px ${category.glow}` : "none",
                       }}
                     >
-                      {canTrain ? sk.icon : "🔒"}
+                      {isUnlocked ? sk.icon : "🔒"}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: canTrain ? "#e8e0cc" : "#8a9aab", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: isUnlocked ? "#e8e0cc" : "#8a9aab", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {sk.name}
                         </span>
                         <span style={{ fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 3, background: "#0a1420", color: tierColor, border: `1px solid ${tierColor}44`, whiteSpace: "nowrap", flexShrink: 0 }}>
                           T{sk.tier} {tierLabel}
                         </span>
                       </div>
-                      <div style={{ fontSize: 8.5, color: canTrain ? "#7a9ab8" : "#4a5a6a", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ fontSize: 8.5, color: isUnlocked ? "#7a9ab8" : "#4a5a6a", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {sk.description}
                       </div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1, flexShrink: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 900, color: canTrain ? category.color : "#3a4a5a", lineHeight: 1 }}>{sk.level}</span>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: isUnlocked ? category.color : "#3a4a5a", lineHeight: 1 }}>{sk.level}</span>
                       <span style={{ fontSize: 7, color: "#5a7a94", fontWeight: 700, letterSpacing: 0.3 }}>NIVEL</span>
                     </div>
                   </div>
@@ -243,14 +313,14 @@ export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp,
                       <span style={{ color: category.color }}>{pct}%</span>
                     </div>
                     <div style={{ width: "100%", height: 4, background: "#050a10", borderRadius: 3, overflow: "hidden", border: "1px solid #0f1e2c" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: canTrain ? category.color : "#233242", borderRadius: 3, transition: "width 0.3s" }} />
+                      <div style={{ width: `${pct}%`, height: "100%", background: isUnlocked ? category.color : "#233242", borderRadius: 3, transition: "width 0.3s" }} />
                     </div>
                   </div>
 
                   {/* XP hacia siguiente nivel */}
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ flex: 1, height: 3, background: "#060d14", borderRadius: 2, overflow: "hidden", border: "1px solid #0f1e2c" }}>
-                      <div style={{ width: `${sk.xp}%`, height: "100%", background: canTrain ? "#3ab4ff" : "#2a3a4a", opacity: canTrain ? 0.9 : 0.5 }} />
+                      <div style={{ width: `${sk.xp}%`, height: "100%", background: isUnlocked ? "#3ab4ff" : "#2a3a4a", opacity: isUnlocked ? 0.9 : 0.5 }} />
                     </div>
                     <span style={{ fontSize: 7.5, color: "#5a7a94", whiteSpace: "nowrap", flexShrink: 0 }}>{sk.xp}/100 XP</span>
                   </div>
@@ -263,47 +333,34 @@ export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp,
 
                   <div style={{ display: "flex", gap: 5, marginTop: 1 }}>
                     <button
-                      disabled={!canTrain || sk.level >= 100}
-                      onClick={() => onAddXp(sk.id, 12)}
+                      disabled={!canTrainSkill || busy !== null}
+                      onClick={() => handleTrainSkill(sk.id)}
                       style={{
                         flex: 1,
-                        background: !canTrain || sk.level >= 100 ? "#0f1418" : "#122030",
-                        color: !canTrain || sk.level >= 100 ? "#3a4a5a" : "#8acfff",
-                        border: `1px solid ${!canTrain || sk.level >= 100 ? "#1a2632" : "#1e3550"}`,
+                        background: !canTrainSkill ? "#0f1418" : "#122030",
+                        color: !canTrainSkill ? "#3a4a5a" : "#8acfff",
+                        border: `1px solid ${!canTrainSkill ? "#1a2632" : "#1e3550"}`,
                         borderRadius: 4,
                         padding: "4px 6px",
                         fontSize: 9,
                         fontWeight: 700,
-                        cursor: !canTrain || sk.level >= 100 ? "default" : "pointer",
-                        opacity: !canTrain || sk.level >= 100 ? 0.6 : 1,
+                        cursor: !canTrainSkill || busy !== null ? "default" : "pointer",
+                        opacity: !canTrainSkill || busy !== null ? 0.6 : 1,
                       }}
+                      title={!canTrain ? `Necesitas un ${scrollName}. Consola: addItem:Pergamino/<Escuela>1..9` : `El servidor consume 1 ${scrollName} y da +${TRAINING_XP} XP`}
                     >
-                      {sk.level >= 100 ? "★ Maestría" : "+12 XP"}
-                    </button>
-                    <button
-                      disabled={!canTrain}
-                      onClick={() => onAddXp(sk.id, 35)}
-                      style={{
-                        background: !canTrain ? "#0f1418" : "#0a1e2e",
-                        color: !canTrain ? "#3a4a5a" : category.color,
-                        border: `1px solid ${!canTrain ? "#1a2632" : category.color + "66"}`,
-                        borderRadius: 4,
-                        padding: "4px 7px",
-                        fontSize: 9,
-                        fontWeight: 800,
-                        cursor: !canTrain ? "default" : "pointer",
-                        opacity: !canTrain ? 0.6 : 1,
-                        whiteSpace: "nowrap",
-                      }}
-                      title="Entrenamiento intensivo"
-                    >
-                      ⚡+35
+                      {sk.level >= 100 ? "★ Maestría" : busy === sk.id ? "⏳…" : `+${TRAINING_XP} XP 📜`}
                     </button>
                   </div>
 
-                  {!canTrain && (
+                  {!isUnlocked && (
                     <div style={{ fontSize: 7.5, color: "#8a6a2a", background: "#1e1508", border: "1px solid #3a2a0a", borderRadius: 3, padding: "2px 5px", textAlign: "center" }}>
                       🔒 Requiere {sk.tier === 2 ? "15%" : "35%"} promedio en {category.label}
+                    </div>
+                  )}
+                  {isUnlocked && !canTrain && sk.level < 100 && (
+                    <div style={{ fontSize: 7.5, color: "#8a6a2a", background: "#1e1508", border: "1px solid #3a2a0a", borderRadius: 3, padding: "2px 5px", textAlign: "center" }}>
+                      📜 Requiere 1 {scrollName}
                     </div>
                   )}
                 </div>
@@ -328,11 +385,7 @@ export function SkillDetailPanel({ category, skills, progress, onClose, onAddXp,
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 8.5, fontWeight: 800, color: "#8ab4cc" }}>Consejo de maestría</div>
               <div style={{ fontSize: 9, color: "#7a9ab8", lineHeight: 1.35 }}>
-                {category.id === "artes_misticas"
-                  ? "Las Artes Místicas avanzan lento: entrena con rituales nocturnos y busca ruinas. Desbloquea T3 al 35% promedio."
-                  : category.id === "milicia"
-                  ? "Milicia alta: mantén barracones activos y realiza escaramuzas. Cada victoria da +XP pasivo."
-                  : "Sube todas las habilidades a la vez con “Entrenar” o enfócate en una para desbloquear maestrías. T2 a 15%, T3 a 35%."}{" "}
+                Cada uso de “Entrenar” consume 1 {scrollName} y da +{TRAINING_XP} XP. Consigue pergaminos en consola con <b>addItem:Pergamino/&lt;Escuela&gt;1..9</b>.{" "}
                 <span style={{ color: category.color, fontWeight: 700 }}>· {progress.avg}% promedio</span>
               </div>
             </div>

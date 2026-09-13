@@ -1,10 +1,15 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   ALL_ITEM_CATEGORIES,
-  createMockPlayerInventory,
   type ItemCategory,
   type PlayerInventoryItem,
 } from "../../items/Item";
+import {
+  PLAYER_INVENTORY_EVENT,
+  getPlayerInventory,
+  refreshPlayerInventory,
+  subscribePlayerInventory,
+} from "./playerInventoryStore";
 import { setInventoryOpen } from "../../ui/input/KeyBindings";
 
 export const INVENTORY_FILTERS: (ItemCategory | "Todos")[] = ["Todos", ...ALL_ITEM_CATEGORIES];
@@ -25,7 +30,33 @@ export const CATEGORY_ICON: Record<ItemCategory, string> = {
 export function usePlayerInventory(onClose?: () => void) {
   const [filter, setFilter] = useState<ItemCategory | "Todos">("Todos");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [items] = useState<PlayerInventoryItem[]>(() => createMockPlayerInventory());
+  const [items, setItems] = useState<PlayerInventoryItem[]>(() => getPlayerInventory());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const err = await refreshPlayerInventory();
+    setError(err);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setItems(getPlayerInventory());
+    const unsub = subscribePlayerInventory(sync);
+    window.addEventListener(PLAYER_INVENTORY_EVENT, sync);
+    let cancelled = false;
+    refreshPlayerInventory().then((err) => {
+      if (cancelled) return;
+      setError(err);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+      window.removeEventListener(PLAYER_INVENTORY_EVENT, sync);
+    };
+  }, []);
 
   // Registrar flag de inventario abierto para control de inputs
   useEffect(() => {
@@ -83,6 +114,9 @@ export function usePlayerInventory(onClose?: () => void) {
     availableSlotsCount: 20,
     lockedSlotsCount: 30,
     maxSlotsCount: 50,
+    loading,
+    error,
+    refresh,
   };
 }
 

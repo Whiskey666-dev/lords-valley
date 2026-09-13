@@ -7,11 +7,10 @@
 ### `NpcPanel.tsx` — Panel de NPC / Personaje
 - Hook: `useNpcPanel` (`hooks/character/useNpcPanel`)
 - Panel fijo derecho `285px`, `borderLeft: 2px solid #00ff88`
-- **4 tabs**: Estado, Atributos, Profesiones, Inventario
+- **3 tabs**: Estado, Atributos, Profesiones
 - **Tab Estado** (`NpcStatusTab`): necesidades `hambre/sed/fatiga/cordura`, barra de salud
 - **Tab Atributos** (`NpcAttributesTab`): 6 atributos (Fuerza, Agilidad, Inteligencia, Carisma, Resistencia, Suerte)
 - **Tab Profesiones** (`NpcProfessionsTab`): 21 profesiones disponibles + XP
-- **Tab Inventario** (`NpcInventoryTab`): hasta 256 items con BigInt
 
 ### `FollowersPanel.tsx` — Panel de Seguidores
 - Hook: `useFollowers` (`hooks/character/useFollowers`)
@@ -37,7 +36,7 @@
 
 ### `DeadDragonPanelData` (exportado desde `DeadDragonPanel.tsx`)
 Interfaz principal que describe el estado de un Dead Dragon.  
-Importado por `useDeadDragonPanel`, `useAppController`, y `InteractionSystem` de Phaser.
+Importado por `useDeadDragonPanel`, `useAppController` y MainScene de Phaser.
 
 ```typescript
 interface DeadDragonPanelData {
@@ -52,7 +51,7 @@ interface DeadDragonPanelData {
 
 ## Apertura / Cierre
 ```
-[Phaser InteractionSystem] → dispatch "phaser-dead-dragon-selected" {DeadDragonPanelData}
+[Phaser MainScene] → dispatch "phaser-dead-dragon-selected" {DeadDragonPanelData}
   → useAppController → setSelectedDeadDragon(data)
   → <DeadDragonPanel dragon={selectedDeadDragon} onClose={...} />
 

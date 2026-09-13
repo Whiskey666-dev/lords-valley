@@ -1,11 +1,11 @@
-# src/events/context.md — DTOs de Eventos Socket.io
+# src/events/context.md — Eventos Socket.io
 
-> Tipos TypeScript para los eventos del servidor de Lords Valley.
+> Formatos de los eventos del servidor de Lords Valley (tipos inline en `app/socket.ts`).
 
 ## Estructura
 ```
 events/
-  dto/       # Data Transfer Objects para cada evento Socket.io
+  context.md   # este archivo (sin código)
 ```
 
 ## Eventos Principales
@@ -18,6 +18,5 @@ events/
 | `RESOURCE_EXTRACTED` | Servidor → Cliente | `{ type, amount, tileX, tileY, sequenceNumber }` |
 
 ## Notas
-- Los DTOs usan `sequenceNumber` para deduplicación de eventos fuera de orden
+- Los eventos usan `sequenceNumber` para deduplicación de eventos fuera de orden
 - `updateViewport` se emite solo si la cámara se movió > 512px (optimización de red)
-- Los tipos están en `events/dto/*.ts`, importados por `app/socket.ts`

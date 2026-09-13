@@ -15,31 +15,11 @@
 - Eventos escuchados: `phaser-start-placement`, `phaser-cancel-placement`, `phaser-plant-crop`, `phaser-harvest-crop`
 - Eventos emitidos: `phaser-crop-plot-selected`, `phaser-placement-mode-changed`, `phaser-farm-plots-changed`
 
-### `FogOfWarSystem.ts` — Niebla de Guerra ✅
-- Renderizado Phaser puro (sin DOM) para 60 FPS
-- Máscara circular alrededor del jugador
-- `FogOverlay.tsx` en React es `return null` — no interfiere
-
-### `MineralPhysics.ts` — Física de Minerales ✅
-- Partículas y animaciones al extraer minerales
-- Integrado con `CollisionMatrix` para vetas sólidas
-
-### `WaterPhysics.ts` — Física de Agua ✅
-- Ondas animadas en tiles de agua
-- Usa `isWaterTileFast` para identificar tiles
-
 ### `InputSystem.ts` — Adaptador de Input ✅
 - Wrapper sobre `ui/input/KeyBindings` para Phaser
 - `getMovementVector()`: vector de movimiento normalizado desde WASD/flechas
-- `is*JustPressed()`: acciones one-shot (atacar, interactuar, etc.)
+- `is*JustPressed()`: acciones one-shot (atacar, saltar, etc.)
 - Respeta `isGameInputBlocked()` para cuando el foco está en UI
-
-### `InteractionSystem.ts` — Sistema de Interacción ✅
-- Gestiona clics en NPCs, Dead Dragons y parcelas
-- Dispara los eventos `phaser-npc-selected`, `phaser-dead-dragon-selected`, `phaser-crop-plot-selected`
-
-### `SelectionSystem.ts` — Sistema de Selección ✅
-- Manejo de selección visual de entidades en el mapa
 
 ### `SpawnSystem.ts` — Sistema de Spawn ✅
 - Generación inicial de NPCs y entidades

@@ -1,7 +1,7 @@
 # game/world / Context — Mundo Procedural en Runtime
 
 ## Propósito
-**Estado runtime del mundo** dentro de `game/`. Contiene la **única implementación real de generación procedural** del proyecto (`Terrain.ts`), distinto de `src/world/` (stubs vacíos que definen interfaces futuras). Orquesta terreno, agua, árboles y minerales para `ChunkRenderer`.
+**Estado runtime del mundo** dentro de `game/`. Contiene la **única implementación de generación procedural** del proyecto (`Terrain.ts`). Orquesta terreno, agua, árboles y minerales para `ChunkRenderer`.
 
 ## Archivos Reales
 | Archivo | Líneas | Rol |
@@ -42,9 +42,9 @@ MainScene.update → ChunkRenderer.update(camera) → 3×3 chunks Container Grap
 ```
 
 ## Dependencias
-- **No importa:** `Phaser` (puro data+math), `world/*` stubs.
+- **No importa:** `Phaser` (puro data+math).
 - **Consumido por:** `game/entities/ChunkRenderer:3` (único consumidor), `hooks/hud/worldMapProcedural` (si existe, reusa lógica), `ui/hud/WorldMapPanel` (leyenda).
-- **Provee a:** visual terrain; `ai/Pathfinding` futuro consultará `isWaterTile/isMineralTile` para A*.
+- **Provee a:** visual terrain.
 
 ## Para Repomix
-No duplicar lógica de agua/minerales — usar `Terrain.isWaterTile/MineralTile` y `WORLD_*` consts. Al implementar `src/world/Map.ts` tilemap, migrar desde `Terrain` manteniendo `noise` y `MINERAL_CONFIGS`. Mundo fijo `6144`, no `2000` antiguo.
+No duplicar lógica de agua/minerales — usar `Terrain.isWaterTile/MineralTile` y `WORLD_*` consts. Mundo fijo `6144`.

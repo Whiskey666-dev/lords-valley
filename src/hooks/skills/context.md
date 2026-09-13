@@ -1,23 +1,25 @@
 # src/hooks/skills/context.md — Hook de Habilidades
 
-> Lógica para el panel de árbol de habilidades del jugador.
+> Estado de habilidades del jugador. La única fuente de verdad es el backend
+> (`GET /player/me/skills`, `POST /player/me/skills/train`, JWT).
 
 ## `useSkills.ts`
-- Estado: `selectedSkill` (habilidad seleccionada para ver detalle), `xpAllocated` por categoría
-- 5 categorías en pentagrama SVG: Combate, Exploración, Artesanía, Diplomacia, Magia
-- Cada categoría: 5 niveles con costo XP creciente
+- Carga del servidor (`loading`/`error`/`refresh` con reintento)
+- `skillsByCat`: mezcla `SKILL_DEFS` (display) + estado remoto (level/xp/tier/unlocked)
+- `trainSchool(cat)` / `trainSkill(cat, skillId)`: piden +10 XP al servidor (consume 1 pergamino allí) y actualizan caché de inventario con la respuesta
+- `selectedCategory`, `categoryProgress`, `globalProgress`
+- 6 escuelas en pentagrama SVG: 5 vértices + núcleo de Artes Místicas
 - Cierra con Escape
 
 ## `skillsData.ts`
-- Estructura de 5 árboles de habilidades
-- Cada nodo: `id`, `name`, `description`, `icon`, `tier`, `xpCost`, `bonuses[]`
-- Unlocking: tier 1 libre, tiers 2-5 requieren tier anterior desbloqueado
+- `SKILL_DEFS`: 6 escuelas × 8 habilidades (id, nombre, icono, descripción). Sin números.
+- `SKILL_CATEGORIES`, `CATEGORY_ORDER`, `PENTAGRAM_ORDER`, `CENTER_CATEGORY`
+- `getCategoryProgress`, `getGlobalProgress`
 
 ## `ui/skills/SkillsPanel.tsx`
-- Visualización como pentagrama SVG interactivo
-- Los 5 vértices son las 5 categorías
-- Habilidades se distribuyen radialmente desde el centro
+- Pentagrama SVG interactivo; click en nodo → `SkillDetailPanel`
+- Banner de carga y caja de error con Reintentar si el backend no responde
 
 ## `ui/skills/SkillDetailPanel.tsx`
-- Panel lateral con detalle de la habilidad seleccionada
-- Muestra: descripción completa, bonuses, costo XP, botón de desbloquear
+- Detalle por escuela: `Entrenar (+10 XP)` y `+10 XP` por habilidad
+- Ambos piden al servidor; el botón se deshabilita sin pergaminos o mientras hay petición en curso (`busy`)

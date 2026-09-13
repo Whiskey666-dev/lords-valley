@@ -30,16 +30,10 @@
 - **Auto-hide**: 5 segundos de timeout, o tecla Escape
 - Posicionamiento adaptativo: se ajusta al borde de la ventana si se sale del viewport
 
-### `FogOverlay.tsx` — Niebla de Guerra
-- Componente React **vacío** (`return null`)
-- La niebla de guerra la gestiona `FogOfWarSystem` de Phaser para mantener 60 FPS
-- Este archivo existe como placeholder para posibles capas DOM adicionales en el futuro
-
 ## Visibilidad Condicional
 ```
 hasSidePanel = showCharacter || selectedNPC || selectedDeadDragon || selectedFarmPlot || showPlayerInventory || showFollowers
 
 MiniMap: oculto si hasSidePanel || showMap (CSS display:none, no desmonta)
-FogOverlay: oculto si showMap (desmonta completamente)
 MineralTooltip: siempre montado, solo visible si hay tooltip activo
 ```

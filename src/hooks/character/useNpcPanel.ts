@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export type NpcTab = "inventario" | "atributos" | "profesiones" | "estado";
+export type NpcTab = "atributos" | "profesiones" | "estado";
 
 export interface NpcPanelData {
   id: string;

@@ -1,23 +1,27 @@
 # src/ui/skills/context.md — Panel de Habilidades
 
-> Árbol de habilidades del jugador visualizado como un pentagrama SVG interactivo.
+> Habilidades del jugador: pentagrama SVG + detalle. Estado y mutaciones en el
+> backend (`/player/me/skills`, JWT); el frontend solo muestra y pide.
 
 ## `SkillsPanel.tsx`
 - Hook: `useSkills` (`hooks/skills/useSkills`)
-- Pentagrama SVG interactivo con 5 vértices = 5 categorías
-- Click en vértice/nodo → selecciona habilidad → abre `SkillDetailPanel`
-- Nodos desbloqueados en color primario, bloqueados en gris
+- Pentagrama SVG interactivo: 5 vértices + núcleo de Artes Místicas
+- Click en vértice/nodo → abre `SkillDetailPanel`
+- Anillo de progreso = promedio de la escuela (dato del servidor)
 
 ## `SkillDetailPanel.tsx`
-- Panel lateral con detalle de la habilidad seleccionada
-- Muestra descripción completa, bonuses aplicados, costo XP total, prerequisitos
-- Botón "Desbloquear" activo solo si el tier anterior está desbloqueado y hay XP suficiente
+- Detalle de la escuela: lista de 8 habilidades con nivel/XP del servidor
+- `⚡ Entrenar (+10 XP)`: entrena la escuela; el servidor exige 1 pergamino y lo consume
+- `+10 XP 📜` por habilidad: igual, individual
+- Muestra `📜 xN` pergaminos (caché de inventario) y el comando para conseguirlos
+- Botones deshabilitados sin pergaminos o con petición en curso
 
-## 5 Categorías de Habilidades
-| Categoría | Icono | Bonuses Ejemplo |
-|---|---|---|
-| Combate | ⚔️ | +daño, +velocidad ataque, +crítico |
-| Exploración | 🗺️ | +velocidad movimiento, +rango visión |
-| Artesanía | 🔨 | +calidad items, -tiempo craft, +recetas |
-| Diplomacia | 🤝 | +lealtad NPCs, +precios comercio |
-| Magia | 🔮 | +poder hechizos, -coste energía |
+## 6 Escuelas
+| Escuela | Icono |
+|---|---|
+| Supervivencia | 🏕️ |
+| Producción | ⚒️ |
+| Política | 🏛️ |
+| Milicia | ⚔️ |
+| Ciencias | 🔬 |
+| Artes Místicas | ✨ |

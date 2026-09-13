@@ -16,7 +16,6 @@ import { ConstructionPanel } from '../ui/construction/ConstructionPanel';
 import { TerrainPanel } from '../ui/terrain/TerrainPanel';
 import { StartScreen } from '../ui/start/StartScreen';
 import { CropPlantingModal } from '../ui/farming/CropPlantingModal';
-import { FogOverlay } from '../ui/hud/FogOverlay';
 import { LoadingScreen } from '../ui/loading/LoadingScreen';
 import { AuthScreen } from './auth/AuthScreen';
 
@@ -165,8 +164,6 @@ function App() {
               position: 'relative',
             }}
           />
-          {/* Niebla de guerra DOM — opaca todo excepto círculo alrededor del personaje */}
-          {!showMap && <FogOverlay />}
         </div>
 
         {/* Panel Personaje (Jugador Principal) - lateral derecho (fixed overlay) */}

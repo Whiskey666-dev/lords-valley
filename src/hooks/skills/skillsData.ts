@@ -6,11 +6,14 @@ export type SkillCategoryId =
   | "ciencias"
   | "artes_misticas";
 
-export interface SkillInfo {
+export interface SkillDef {
   id: string;
   name: string;
   icon: string;
   description: string;
+}
+
+export interface SkillInfo extends SkillDef {
   level: number; // 0..100
   xp: number; // 0..100 hacia siguiente nivel porcentual
   maxXp: number;
@@ -120,88 +123,68 @@ export const PENTAGRAM_ORDER: SkillCategoryId[] = [
 
 export const CENTER_CATEGORY: SkillCategoryId = "artes_misticas";
 
-function mkSkill(
-  id: string,
-  name: string,
-  icon: string,
-  description: string,
-  level: number,
-  xp = Math.floor(Math.random() * 60) + 10,
-  tier: 1 | 2 | 3 = 1,
-): SkillInfo {
-  return {
-    id,
-    name,
-    icon,
-    description,
-    level: Math.max(0, Math.min(100, level)),
-    xp,
-    maxXp: 100,
-    tier,
-    unlocked: level > 0 || tier === 1,
-  };
-}
-
-export const INITIAL_SKILLS: Record<SkillCategoryId, SkillInfo[]> = {
+// Definiciones estáticas de display. Los números (level/xp/tier) viven en el
+// backend: la única fuente de verdad es GET /player/me/skills (JWT).
+export const SKILL_DEFS: Record<SkillCategoryId, SkillDef[]> = {
   supervivencia: [
-    mkSkill("sup_rastreo", "Rastreo", "🐾", "Leer huellas, seguir rastros y no perderte en el bosque.", 75, 42, 1),
-    mkSkill("sup_caza", "Caza Menor", "🏹", "Abatir presas pequeñas con arco y trampas.", 82, 68, 1),
-    mkSkill("sup_pesca", "Pesca", "🎣", "Asegurar proteína del río con lanza o caña.", 60, 25, 1),
-    mkSkill("sup_herbolaria", "Herbolaria", "🌿", "Identificar hierbas medicinales y venenosas.", 70, 55, 2),
-    mkSkill("sup_fogatas", "Fuego y Brasas", "🔥", "Encender, mantener y transportar fuego.", 65, 80, 1),
-    mkSkill("sup_orientacion", "Orientación", "🧭", "Cartografía, brújula y puntos cardinales.", 58, 33, 1),
-    mkSkill("sup_resistencia", "Resistencia", "💪", "Soportar frío, hambre y fatiga prolongada.", 72, 47, 2),
-    mkSkill("sup_tramperia", "Trampería", "🪤", "Colocar lazos, cepos y fosos eficaces.", 62, 18, 2),
+    { id: "sup_rastreo", name: "Rastreo", icon: "🐾", description: "Leer huellas, seguir rastros y no perderte en el bosque." },
+    { id: "sup_caza", name: "Caza Menor", icon: "🏹", description: "Abatir presas pequeñas con arco y trampas." },
+    { id: "sup_pesca", name: "Pesca", icon: "🎣", description: "Asegurar proteína del río con lanza o caña." },
+    { id: "sup_herbolaria", name: "Herbolaria", icon: "🌿", description: "Identificar hierbas medicinales y venenosas." },
+    { id: "sup_fogatas", name: "Fuego y Brasas", icon: "🔥", description: "Encender, mantener y transportar fuego." },
+    { id: "sup_orientacion", name: "Orientación", icon: "🧭", description: "Cartografía, brújula y puntos cardinales." },
+    { id: "sup_resistencia", name: "Resistencia", icon: "💪", description: "Soportar frío, hambre y fatiga prolongada." },
+    { id: "sup_tramperia", name: "Trampería", icon: "🪤", description: "Colocar lazos, cepos y fosos eficaces." },
   ],
   produccion: [
-    mkSkill("prod_agricultura", "Agricultura", "🌾", "Arar, sembrar y rotar cosechas.", 50, 70, 1),
-    mkSkill("prod_carpinteria", "Carpintería", "🪚", "Convertir troncos en tablas, vigas y muebles.", 60, 40, 1),
-    mkSkill("prod_herreria", "Herrería", "🔨", "Forjar herramientas y armas de hierro.", 30, 22, 2),
-    mkSkill("prod_canteria", "Cantería", "⛏️", "Extraer y labrar piedra para construcción.", 40, 55, 1),
-    mkSkill("prod_curtiduria", "Curtiduría", "🧥", "Curtir pieles y producir cuero.", 55, 60, 2),
-    mkSkill("prod_alquimia", "Alquimia Práctica", "⚗️", "Destilar aceites y preparar compuestos.", 35, 15, 3),
-    mkSkill("prod_textil", "Textil", "🧵", "Hilar, tejer y confeccionar ropa.", 42, 35, 2),
-    mkSkill("prod_cocina", "Cocina", "🍲", "Conservar y cocinar alimentos para muchos.", 48, 88, 1),
+    { id: "prod_agricultura", name: "Agricultura", icon: "🌾", description: "Arar, sembrar y rotar cosechas." },
+    { id: "prod_carpinteria", name: "Carpintería", icon: "🪚", description: "Convertir troncos en tablas, vigas y muebles." },
+    { id: "prod_herreria", name: "Herrería", icon: "🔨", description: "Forjar herramientas y armas de hierro." },
+    { id: "prod_canteria", name: "Cantería", icon: "⛏️", description: "Extraer y labrar piedra para construcción." },
+    { id: "prod_curtiduria", name: "Curtiduría", icon: "🧥", description: "Curtir pieles y producir cuero." },
+    { id: "prod_alquimia", name: "Alquimia Práctica", icon: "⚗️", description: "Destilar aceites y preparar compuestos." },
+    { id: "prod_textil", name: "Textil", icon: "🧵", description: "Hilar, tejer y confeccionar ropa." },
+    { id: "prod_cocina", name: "Cocina", icon: "🍲", description: "Conservar y cocinar alimentos para muchos." },
   ],
   politica: [
-    mkSkill("pol_liderazgo", "Liderazgo", "👑", "Inspirar lealtad y sostener autoridad.", 30, 45, 1),
-    mkSkill("pol_diplomacia", "Diplomacia", "🤝", "Negociar pactos y evitar guerras.", 25, 30, 2),
-    mkSkill("pol_administracion", "Administración", "📋", "Gestionar bodegas, turnos y tributos.", 20, 12, 1),
-    mkSkill("pol_justicia", "Justicia", "⚖️", "Impartir ley y resolver disputas.", 15, 5, 2),
-    mkSkill("pol_comercio", "Comercio", "💰", "Trueque, precios y rutas comerciales.", 28, 60, 1),
-    mkSkill("pol_oratoria", "Oratoria", "📜", "Arengar multitudes y redactar decretos.", 18, 28, 2),
-    mkSkill("pol_intriga", "Intriga", "🎭", "Detectar conspiraciones y mover hilos.", 22, 18, 3),
-    mkSkill("pol_legitimidad", "Legitimidad", "🕊️", "Sostener el derecho divino a gobernar.", 16, 40, 3),
+    { id: "pol_liderazgo", name: "Liderazgo", icon: "👑", description: "Inspirar lealtad y sostener autoridad." },
+    { id: "pol_diplomacia", name: "Diplomacia", icon: "🤝", description: "Negociar pactos y evitar guerras." },
+    { id: "pol_administracion", name: "Administración", icon: "📋", description: "Gestionar bodegas, turnos y tributos." },
+    { id: "pol_justicia", name: "Justicia", icon: "⚖️", description: "Impartir ley y resolver disputas." },
+    { id: "pol_comercio", name: "Comercio", icon: "💰", description: "Trueque, precios y rutas comerciales." },
+    { id: "pol_oratoria", name: "Oratoria", icon: "📜", description: "Arengar multitudes y redactar decretos." },
+    { id: "pol_intriga", name: "Intriga", icon: "🎭", description: "Detectar conspiraciones y mover hilos." },
+    { id: "pol_legitimidad", name: "Legitimidad", icon: "🕊️", description: "Sostener el derecho divino a gobernar." },
   ],
   milicia: [
-    mkSkill("mil_combate", "Combate Cuerpo a Cuerpo", "🗡️", "Espada, hacha y escudo en duelo.", 88, 75, 1),
-    mkSkill("mil_arqueria", "Arquería", "🎯", "Precisión con arco y ballesta.", 75, 50, 1),
-    mkSkill("mil_defensa", "Defensa", "🛡️", "Resistir golpes, formar muro de escudos.", 82, 62, 1),
-    mkSkill("mil_tactica", "Táctica", "📯", "Maniobrar unidades y aprovechar terreno.", 78, 44, 2),
-    mkSkill("mil_caballeria", "Caballería", "🐎", "Carga montada y persecución.", 70, 20, 2),
-    mkSkill("mil_asedio", "Asedio", "🏗️", "Arietes, torres y catapultas.", 85, 90, 3),
-    mkSkill("mil_supervivencia_mil", "Supervivencia Militar", "⛺", "Marchas forzadas y campamentos.", 80, 35, 2),
-    mkSkill("mil_logistica", "Logística Militar", "📦", "Raciones, forraje y munición al frente.", 82, 55, 2),
+    { id: "mil_combate", name: "Combate Cuerpo a Cuerpo", icon: "🗡️", description: "Espada, hacha y escudo en duelo." },
+    { id: "mil_arqueria", name: "Arquería", icon: "🎯", description: "Precisión con arco y ballesta." },
+    { id: "mil_defensa", name: "Defensa", icon: "🛡️", description: "Resistir golpes, formar muro de escudos." },
+    { id: "mil_tactica", name: "Táctica", icon: "📯", description: "Maniobrar unidades y aprovechar terreno." },
+    { id: "mil_caballeria", name: "Caballería", icon: "🐎", description: "Carga montada y persecución." },
+    { id: "mil_asedio", name: "Asedio", icon: "🏗️", description: "Arietes, torres y catapultas." },
+    { id: "mil_supervivencia_mil", name: "Supervivencia Militar", icon: "⛺", description: "Marchas forzadas y campamentos." },
+    { id: "mil_logistica", name: "Logística Militar", icon: "📦", description: "Raciones, forraje y munición al frente." },
   ],
   ciencias: [
-    mkSkill("cie_medicina", "Medicina", "🏥", "Curar heridas, contener epidemias.", 40, 60, 1),
-    mkSkill("cie_ingenieria", "Ingeniería", "📐", "Diseñar estructuras y mecanismos.", 30, 25, 2),
-    mkSkill("cie_astronomia", "Astronomía", "🔭", "Navegación estelar y calendarios.", 25, 10, 3),
-    mkSkill("cie_alquimia_t", "Alquimia Teórica", "🧪", "Principios químicos y transmutación.", 45, 70, 2),
-    mkSkill("cie_matematicas", "Matemáticas", "🔢", "Cálculo, contabilidad y balística.", 38, 42, 2),
-    mkSkill("cie_historia", "Historia", "📚", "Crónicas, linajes y precedentes legales.", 32, 18, 1),
-    mkSkill("cie_navegacion", "Navegación", "⛵", "Rutas marítimas y fluviales.", 28, 33, 2),
-    mkSkill("cie_invencion", "Invención", "💡", "Prototipos y patentes.", 42, 55, 3),
+    { id: "cie_medicina", name: "Medicina", icon: "🏥", description: "Curar heridas, contener epidemias." },
+    { id: "cie_ingenieria", name: "Ingeniería", icon: "📐", description: "Diseñar estructuras y mecanismos." },
+    { id: "cie_astronomia", name: "Astronomía", icon: "🔭", description: "Navegación estelar y calendarios." },
+    { id: "cie_alquimia_t", name: "Alquimia Teórica", icon: "🧪", description: "Principios químicos y transmutación." },
+    { id: "cie_matematicas", name: "Matemáticas", icon: "🔢", description: "Cálculo, contabilidad y balística." },
+    { id: "cie_historia", name: "Historia", icon: "📚", description: "Crónicas, linajes y precedentes legales." },
+    { id: "cie_navegacion", name: "Navegación", icon: "⛵", description: "Rutas marítimas y fluviales." },
+    { id: "cie_invencion", name: "Invención", icon: "💡", description: "Prototipos y patentes." },
   ],
   artes_misticas: [
-    mkSkill("mis_ritualismo", "Ritualismo", "🕯️", "Círculos, ofrendas y horas propicias.", 15, 80, 2),
-    mkSkill("mis_adivinacion", "Adivinación", "🔮", "Leer augurios y presagios.", 10, 45, 3),
-    mkSkill("mis_encantamiento", "Encantamiento", "✨", "Bendecir armas y amuletos.", 18, 60, 2),
-    mkSkill("mis_nigromancia", "Nigromancia", "💀", "Tratar con los muertos (prohibida).", 5, 12, 3),
-    mkSkill("mis_elementalismo", "Elementalismo", "🌊", "Invocar fuego, agua, viento y tierra.", 12, 30, 3),
-    mkSkill("mis_ilusionismo", "Ilusionismo", "🎭", "Velos y engaños sensoriales.", 8, 22, 2),
-    mkSkill("mis_sanacion", "Sanación Mística", "🕊️", "Cerrar heridas con imposición.", 20, 50, 2),
-    mkSkill("mis_pacto", "Pacto Antiguo", "📜", "Vincularse a entidad mayor.", 10, 15, 3),
+    { id: "mis_ritualismo", name: "Ritualismo", icon: "🕯️", description: "Círculos, ofrendas y horas propicias." },
+    { id: "mis_adivinacion", name: "Adivinación", icon: "🔮", description: "Leer augurios y presagios." },
+    { id: "mis_encantamiento", name: "Encantamiento", icon: "✨", description: "Bendecir armas y amuletos." },
+    { id: "mis_nigromancia", name: "Nigromancia", icon: "💀", description: "Tratar con los muertos (prohibida)." },
+    { id: "mis_elementalismo", name: "Elementalismo", icon: "🌊", description: "Invocar fuego, agua, viento y tierra." },
+    { id: "mis_ilusionismo", name: "Ilusionismo", icon: "🎭", description: "Velos y engaños sensoriales." },
+    { id: "mis_sanacion", name: "Sanación Mística", icon: "🕊️", description: "Cerrar heridas con imposición." },
+    { id: "mis_pacto", name: "Pacto Antiguo", icon: "📜", description: "Vincularse a entidad mayor." },
   ],
 };
 
@@ -220,10 +203,4 @@ export function getGlobalProgress(all: Record<SkillCategoryId, SkillInfo[]>) {
   const max = allSkills.length * 100;
   const percent = max === 0 ? 0 : Math.round((total / max) * 100);
   return { total, max, percent, count: allSkills.length };
-}
-
-export function getSkillTierColor(tier: number) {
-  if (tier === 3) return "#ffd54f";
-  if (tier === 2) return "#42a5f5";
-  return "#7a9ab8";
 }

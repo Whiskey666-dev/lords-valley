@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isRebindingActive, setConsoleOpen } from "../../ui/input/KeyBindings";
+import { addItemRemote } from "../inventory/playerInventoryStore";
 
 export function useConsole() {
   const [open, setOpen] = useState(false);
@@ -245,7 +246,75 @@ export function useConsole() {
       return;
     }
     if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | createGhost1..3 | CreativeMode | SurvivalMode | fog toggle/on/off | fog radius <32-2000> | help");
+      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | createGhost1..3 | CreativeMode | SurvivalMode | fog toggle/on/off | fog radius <32-2000> | addItem:<Item><1-9> (ej: addItem:Madera5) | addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5) | help");
+      return;
+    }
+    // — Añadir items al inventario (validado por el backend con JWT) —
+    // addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5)
+    // addItem:<Item del catálogo><1-9> (ej: addItem:Madera5, addItem:Pan3)
+    if (lower.startsWith("additem")) {
+      const restMatch = trimmed.match(/^additem\s*:\s*(.+?)\s*$/i);
+      if (!restMatch) {
+        setFeedback("Uso: addItem:<Item><1-9> · Ej: addItem:Madera5 · Pergaminos: addItem:Pergamino/Survival5");
+        setTimeout(() => setFeedback(null), 3000);
+        return;
+      }
+      const rest = restMatch[1].trim();
+      if (rest.includes("/")) {
+        const parts = rest.split("/");
+        if (parts.length !== 2) {
+          setFeedback("Uso: addItem:Pergamino/<Escuela><1-9> · Ej: addItem:Pergamino/Survival5");
+          setTimeout(() => setFeedback(null), 3000);
+          return;
+        }
+        const itemPart = parts[0].trim().toLowerCase();
+        const schoolQtyPart = parts[1].trim();
+        const isPergamino = itemPart === "pergamino" || itemPart === "pergaminos" || itemPart === "scroll";
+        if (!isPergamino) {
+          setFeedback(`Item "${parts[0].trim()}" no soportado con /. Usa: addItem:Pergamino/<Escuela><1-9> o addItem:<Item><1-9> (ej: addItem:Madera5)`);
+          setTimeout(() => setFeedback(null), 3500);
+          return;
+        }
+        const qtyMatch = schoolQtyPart.match(/^(.+?)\s*([1-9])$/);
+        if (!qtyMatch) {
+          setFeedback("La cantidad debe ser un número del 1 al 9 al final. Ej: addItem:Pergamino/Survival5");
+          setTimeout(() => setFeedback(null), 3000);
+          return;
+        }
+        const payload = { escuela: qtyMatch[1].trim(), cantidad: parseInt(qtyMatch[2], 10) };
+        setFeedback("⏳ Validando en el servidor…");
+        void addItemRemote(payload).then((res) => {
+          if (res.ok) {
+            setFeedback(`📜 +${payload.cantidad} pergamino de ${payload.escuela} añadido (validado). Abre Habilidades para Entrenar.`);
+            setHistory(h => [...h.slice(-8), `✓ ${payload.cantidad}x pergamino ${payload.escuela}`]);
+            setInput("");
+          } else {
+            setFeedback(res.message);
+          }
+          setTimeout(() => setFeedback(null), 3500);
+        });
+        return;
+      }
+      const qtyMatch = rest.match(/^(.+?)\s*([1-9])?$/);
+      const rawName = (qtyMatch?.[1] ?? rest).trim();
+      const qty = qtyMatch?.[2] ? parseInt(qtyMatch[2], 10) : 1;
+      const normalized = rawName.toLowerCase();
+      if (normalized === "pergamino" || normalized === "pergaminos" || normalized === "scroll") {
+        setFeedback("El pergamino necesita escuela: addItem:Pergamino/<Escuela><1-9> · Ej: addItem:Pergamino/Survival5");
+        setTimeout(() => setFeedback(null), 3500);
+        return;
+      }
+      setFeedback("⏳ Validando en el servidor…");
+      void addItemRemote({ nombre: rawName, cantidad: qty }).then((res) => {
+        if (res.ok) {
+          setFeedback(`🎒 +${qty} ${rawName} añadido (validado). Abre el Inventario (I) para verlo.`);
+          setHistory(h => [...h.slice(-8), `✓ ${qty}x ${rawName}`]);
+          setInput("");
+        } else {
+          setFeedback(res.message);
+        }
+        setTimeout(() => setFeedback(null), 3500);
+      });
       return;
     }
     if (
@@ -255,7 +324,8 @@ export function useConsole() {
       !lower.startsWith("creative") &&
       !lower.startsWith("survival") &&
       !lower.startsWith("fog") &&
-      !lower.startsWith("niebla")
+      !lower.startsWith("niebla") &&
+      !lower.startsWith("additem")
     ) {
       setFeedback("💬 Para chatear cambia a modo Chat");
       setTimeout(() => setFeedback(null), 2000);

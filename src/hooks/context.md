@@ -17,7 +17,7 @@
 | `loading/` | `useLoadingScreen` | Barra de carga en tiempo real vía `lords-loading-progress`, fallback timer, ID jugador |
 | `menu/` | `useNavbar`, `useConsole`, `useSettingsPanel`, `useKeybindsEditor` | Menús y configuración |
 | `missions/` | `useMissions`, `missionsData` | 120 misiones, 6 capítulos, progreso, desbloqueo secuencial |
-| `skills/` | `useSkills`, `skillsData` | 5 categorías de habilidades, progresión XP, desbloqueo por tier |
+| `skills/` | `useSkills`, `skillsData` | 6 escuelas, estado del servidor (`/player/me/skills`), entrenar vía API (+10 XP, pergamino en servidor) |
 
 ## Convención de Hooks
 

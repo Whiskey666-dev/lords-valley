@@ -204,8 +204,11 @@ export function SkillsPanel({ onClose }: Props) {
     setSelectedCategory,
     selectedCategoryInfo,
     selectedSkills,
-    addXp,
-    addCategoryXp,
+    trainSchool,
+    trainSkill,
+    loading,
+    error,
+    refresh,
   } = useSkills();
 
   const [viewportW, setViewportW] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 800));
@@ -688,9 +691,26 @@ export function SkillsPanel({ onClose }: Props) {
           skills={selectedSkills}
           progress={categoryProgress[selectedCategory]}
           onClose={() => setSelectedCategory(null)}
-          onAddXp={(skillId, amt) => addXp(selectedCategory, skillId, amt)}
-          onAddCategoryXp={(amt) => addCategoryXp(selectedCategory, amt)}
+          onTrainSkill={(skillId) => trainSkill(selectedCategory, skillId)}
+          onTrainSchool={() => trainSchool(selectedCategory)}
         />
+      )}
+      {loading && !selectedCategory && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 240, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <span style={{ fontSize: 11, color: "#8ab4cc", background: "rgba(0,0,0,0.7)", padding: "6px 12px", borderRadius: 6, border: "1px solid #1a2f44" }}>
+            ⏳ Cargando habilidades del servidor…
+          </span>
+        </div>
+      )}
+      {error && !selectedCategory && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 240, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <span style={{ fontSize: 11, color: "#ff7a7a", background: "rgba(0,0,0,0.85)", padding: "8px 12px", borderRadius: 6, border: "1px solid #3a1a1a", pointerEvents: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+            {error}
+            <button onClick={() => void refresh()} style={{ background: "#1e2a3a", color: "#8ab4ff", border: "1px solid #4a90e2", borderRadius: 5, padding: "3px 8px", fontSize: 10, cursor: "pointer" }}>
+              Reintentar
+            </button>
+          </span>
+        </div>
       )}
     </div>
   );

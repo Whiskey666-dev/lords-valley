@@ -19,24 +19,20 @@ ui/
   character/NpcPanel.tsx        # Panel lateral NPC/Jugador (285px)
   character/FollowersPanel.tsx  # Panel de seguidores (izquierda fijo)
   character/DeadDragonPanel.tsx # Panel del Dead Dragon (285px)
-  character/components/         # NpcStatusTab, NpcAttributesTab, NpcProfessionsTab, NpcInventoryTab
-  inventory/PlayerInventoryPanel.tsx  # Inventario del jugador (285px)
+  character/components/         # NpcStatusTab, NpcAttributesTab, NpcProfessionsTab
+  inventory/PlayerInventoryPanel.tsx  # Inventario del jugador (285px, estado del servidor)
   inventory/components/         # EquippedSlotsGrid, InventoryCategoryFilter, InventorySlotsGrid
   hud/MiniMap.tsx               # Minimapa circular expandible
   hud/WorldMapPanel.tsx         # Mapa mundial fullscreen con filtros
   hud/MineralTooltip.tsx        # Tooltip on-click de minerales
-  hud/FogOverlay.tsx            # Placeholder (niebla en Phaser)
   hud/components/WorldInfoPanel.tsx  # Fecha/hora/clima
   farming/CropPlantingModal.tsx # Modal siembra/cosecha (29 cultivos, ciclo 24h)
   construction/ConstructionPanel.tsx # Panel 56 edificios + mejoras por capítulo
   buildings/BuildingsPanel.tsx  # Gestión y administración de edificios construidos
   missions/MissionsPanel.tsx    # 120 misiones en 6 capítulos
-  skills/SkillsPanel.tsx        # Pentagrama de habilidades SVG interactivo
-  skills/SkillDetailPanel.tsx   # Detalle de habilidad seleccionada
-  settlement/InventoryPanel.tsx # Inventario central del asentamiento
-  settlement/ProfessionTree.tsx # Árbol de 21 profesiones
+  skills/SkillsPanel.tsx        # Pentagrama de habilidades SVG interactivo (estado del servidor)
+  skills/SkillDetailPanel.tsx   # Detalle de habilidad seleccionada (entrena vía servidor)
   loading/LoadingScreen.tsx     # Pantalla de carga medieval (z-index 9999)
-  orders/                       # (vacío) Panel de órdenes de producción previsto
 ```
 
 ## Paneles y sus Hooks
