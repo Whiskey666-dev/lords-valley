@@ -1,4 +1,5 @@
 import { useConsole } from "../../hooks/menu/useConsole";
+import { CommandMenuPanel } from "./CommandMenuPanel";
 
 /**
  * Console.tsx - UI/Menu - Consola de comandos del juego.
@@ -16,11 +17,26 @@ export function Console() {
     inputRef,
     execute,
     closeConsole,
+    menuOpen,
+    closeMenu,
+    godMode,
   } = useConsole();
 
   if (!open) return null;
 
   return (
+    <>
+      {menuOpen && (
+        <CommandMenuPanel
+          godMode={godMode}
+          onSelect={(cmd) => {
+            setInput(cmd);
+            closeMenu();
+            setTimeout(() => inputRef.current?.focus(), 0);
+          }}
+          onClose={closeMenu}
+        />
+      )}
     <div
       style={{
         position: "absolute",
@@ -98,7 +114,7 @@ export function Console() {
             // @ts-ignore
             if (e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
           }}
-          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "addItem:Madera5 | addItem:Pergamino/Survival5 | createNpc1..10 | help | ENTER ejecutar"}
+          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "menu | spawnGhost2 | createNpc5 | addItem:Madera5 | GodModeOn | help | ENTER ejecutar"}
           style={{
             flex: 1,
             background: "#1a1a1a",
@@ -148,10 +164,11 @@ export function Console() {
             <div key={i} style={{ opacity: 0.7 }}>{h}</div>
           ))}
           <div style={{ color: "#666" }}>
-            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: addItem:Madera5 | addItem:Pergamino/Survival5 | createNpc5 | fog toggle"}
+            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: menu | spawnGhost2 | createNpc5 | addItem:Madera5 | GodModeOn"}
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }

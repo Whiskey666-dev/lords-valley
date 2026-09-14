@@ -80,18 +80,25 @@ export function joinCombatRoom(settlementId: string): void {
  * Solicita al servidor spawnear ghosts.
  * El servidor genera IDs UUID reales y hace broadcast a todos en el room.
  * El cliente NO crea ghosts hasta recibir el evento 'ghost:spawned'.
+ * `base` es solo una sugerencia (punto aleatorio del mapa iso): el servidor
+ * dispersa alrededor y sigue siendo la autoridad de la posición final.
  */
-export function requestGhostSpawn(settlementId: string, count = 1): void {
+export function requestGhostSpawn(settlementId: string, count = 1, base?: { x: number; y: number }): void {
   const s = getCombatSocket();
-  s.emit('ghost:spawn_request', { settlementId, count });
+  s.emit('ghost:spawn_request', {
+    settlementId,
+    count,
+    ...(typeof base?.x === 'number' && typeof base?.y === 'number'
+      ? { baseX: Math.round(base.x), baseY: Math.round(base.y) }
+      : {}),
+  });
 }
 
 /**
  * Reporta que el jugador hizo daño a un ghost.
  * El servidor valida (distancia, cooldown) y emite 'ghost:damage_result'.
  * El cliente NO aplica daño localmente hasta recibir la confirmación.
- */
-export function reportGhostDamage(params: {
+ */export function reportGhostDamage(params: {
   ghostId: string;
   amount: number;
   attackerId: string;
@@ -124,4 +131,50 @@ export function reportPlayerAttacked(params: {
 export function updateGhostPosition(ghostId: string, x: number, y: number): void {
   const s = getCombatSocket();
   s.emit('ghost:position_update', { ghostId, x, y });
+}
+
+/** ID de entidad del jugador para reportes de combate (un jugador por settlement en v0.1).
+ * Debe ser idéntico en todas las rutas (ghost y combat:hit comparten el HP del servidor). */
+export function playerEntityId(): string {
+  try {
+    return (window as any).__PLAYER_ID__ ?? 'player';
+  } catch {
+    return 'player';
+  }
+}
+
+/** Settlement actual para reportes de combate */
+export function currentSettlementId(): string {
+  try {
+    return (window as any).__SETTLEMENT_ID__ ?? localStorage.getItem('settlementId') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export type CombatKind = 'player' | 'survivor' | 'dead-dragon' | 'ghost';
+
+/**
+ * Reporta un golpe genérico. El servidor valida (kinds, distancia, cooldown)
+ * y decreta daño y muerte; el cliente aplica solo al recibir 'combat:hit_result'.
+ */
+export function reportCombatHit(params: {
+  attackerId: string;
+  attackerKind: CombatKind;
+  targetId: string;
+  targetKind: CombatKind;
+  attackerX: number;
+  attackerY: number;
+  targetX: number;
+  targetY: number;
+  amount?: number;
+}): void {
+  const s = getCombatSocket();
+  s.emit('combat:hit', { ...params, settlementId: currentSettlementId() });
+}
+
+/** Avisa al servidor que una entidad reapareció (restaura su HP a lleno) */
+export function reportRespawn(entityId: string, kind: CombatKind): void {
+  const s = getCombatSocket();
+  s.emit('player:respawn', { entityId, kind, settlementId: currentSettlementId() });
 }

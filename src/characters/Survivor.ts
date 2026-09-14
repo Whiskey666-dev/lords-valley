@@ -11,6 +11,21 @@ import { Skills } from './Skills';
 import { Gustos } from './Gustos';
 import { Inventory } from '../items/Inventory';
 import { Equipment } from '../items/Equipment';
+import { reportCombatHit } from '../app/socket';
+
+/** Rango cuerpo a cuerpo con el que un superviviente se defiende (sin perseguir) */
+const SURVIVOR_DEFENSE_RANGE = 70;
+/** Cooldown local entre golpes (el servidor aplica el suyo: 1500ms) */
+const SURVIVOR_DEFENSE_COOLDOWN = 1500;
+
+/** Objetivo de combate (forma estructural: evita imports circulares con Ghost/DeadDragon) */
+export interface CombatTargetLike {
+    id: string;
+    estaVivo: boolean;
+    /** Solo en dragones: los aliados nunca son objetivo */
+    isAlly?: boolean;
+    sprite: { x: number; y: number; active: boolean } | null;
+}
 
 /**
  * Sprite concreto para humanos NPC, reutiliza el sistema de animaciones de BaseHuman/Animations.
@@ -18,10 +33,50 @@ import { Equipment } from '../items/Equipment';
  * Ej: class VillagerSprite extends BaseHuman { constructor(s,x,y){ super(s,x,y,"player_idle_down","villager_","villager_") } }
  */
 class SurvivorSprite extends BaseHuman {
+    public healthBarBg: Phaser.GameObjects.Rectangle | null = null;
+    public healthBarHp: Phaser.GameObjects.Rectangle | null = null;
+    public healthBarEn: Phaser.GameObjects.Rectangle | null = null;
+
     constructor(scene: Phaser.Scene, x: number, y: number) {
         // Modular: animPrefix "npc_" genera "npc_walk_*" etc., textura "npc_*" con fallback a "player_*"
         super(scene, x, y, 'player_idle_down', 'npc_', 'npc_');
         this.play('npc_idle_down', true);
+        this.createBars(scene, x, y);
+    }
+
+    private createBars(scene: Phaser.Scene, x: number, y: number) {
+        const barY = y - 56;
+        this.healthBarBg = scene.add.rectangle(x, barY, 42, 13, 0x000000, 0.75);
+        this.healthBarBg.setDepth(9000);
+        this.healthBarBg.setOrigin(0.5, 0.5);
+        this.healthBarHp = scene.add.rectangle(x - 20, barY - 3, 40, 4, 0xff2222, 1);
+        this.healthBarHp.setDepth(9001);
+        this.healthBarHp.setOrigin(0, 0.5);
+        this.healthBarEn = scene.add.rectangle(x - 20, barY + 3, 40, 4, 0x44aaff, 1);
+        this.healthBarEn.setDepth(9001);
+        this.healthBarEn.setOrigin(0, 0.5);
+    }
+
+    /** Barras en porcentaje sobre los máximos (0..1). */
+    public syncBars(salud: number, maxSalud: number, energia: number, maxEnergia: number) {
+        if (!this.healthBarBg || !this.healthBarHp || !this.healthBarEn) return;
+        const barY = this.y - 56;
+        this.healthBarBg.setPosition(this.x, barY);
+        this.healthBarHp.setPosition(this.x - 20, barY - 3);
+        this.healthBarEn.setPosition(this.x - 20, barY + 3);
+        const hpPct = Math.max(0, Math.min(1, salud / Math.max(1, maxSalud)));
+        const enPct = Math.max(0, Math.min(1, energia / Math.max(1, maxEnergia)));
+        this.healthBarHp.setSize(Math.round(40 * hpPct), 4);
+        this.healthBarEn.setSize(Math.round(40 * enPct), 4);
+    }
+
+    public destroyBars() {
+        this.healthBarBg?.destroy();
+        this.healthBarHp?.destroy();
+        this.healthBarEn?.destroy();
+        this.healthBarBg = null;
+        this.healthBarHp = null;
+        this.healthBarEn = null;
     }
 }
 
@@ -46,6 +101,8 @@ export class Survivor {
     public sprite: SurvivorSprite | null = null;
     private isJumping = false;
     private isDashing = false;
+    private isDead = false;
+    private lastDefenseAt = 0;
 
     private static readonly NOMBRES = ["Aldous", "Goffrey", "Eldric", "Wulfric", "Rowena", "Gisela", "Brom", "Yara", "Cedric", "Mira", "Hob", "Edda", "Joren", "Lysa", "Tormund", "Svala"];
     private static readonly PROFESIONES = ["Leñador", "Minero", "Granjero", "Cazador", "Carpintero", "Herrero", "Médico", "Explorador", "Guardia", "Cocinero"];
@@ -75,12 +132,12 @@ export class Survivor {
         surv.profesion = serverData.professions?.[0]?.type
             ? Survivor.mapBackendProfession(serverData.professions[0].type)
             : surv.profesion;
-        // Sincronizar stats y needs desde datos del servidor (sobrescribe los aleatorios del constructor)
-        if (serverData.attributes) {
-            surv.stats.maxSalud = 80 + (serverData.attributes.strength ?? 10) * 2;
-            surv.stats.salud = surv.stats.maxSalud;
-            surv.stats.energia = 70 + (serverData.attributes.endurance ?? 10) * 2;
-        }
+        // Stats canónicas del servidor (CombatService.COMBAT_STATS.survivor):
+        // 200 salud / 50 energía. El servidor es la autoridad del HP.
+        surv.stats.maxSalud = 200;
+        surv.stats.salud = 200;
+        surv.stats.maxEnergia = 50;
+        surv.stats.energia = 50;
         if (serverData.needs) {
             surv.needs.hambre = serverData.needs.hunger ?? 0;
             surv.needs.sed = serverData.needs.thirst ?? 0;
@@ -141,7 +198,7 @@ export class Survivor {
             inventario: this.inventory.getResumen(),
             equipamiento: this.equipment.getResumen(),
             habilidades: Object.entries(this.skills.niveles).map(([k, v]) => `${k}: Lv${v}`),
-            stats: { salud: this.stats.salud, maxSalud: this.stats.maxSalud, energia: this.stats.energia },
+            stats: { salud: this.stats.salud, maxSalud: this.stats.maxSalud, energia: this.stats.energia, maxEnergia: this.stats.maxEnergia },
             needs: { hambre: this.needs.hambre, sed: this.needs.sed, sueno: this.needs.sueno },
             nombre: this.nombre,
             profesion: this.profesion,
@@ -171,19 +228,103 @@ export class Survivor {
 
     desinstanciarSprite() {
         if (this.sprite) {
+            this.sprite.destroyBars();
             this.sprite.destroy();
             this.sprite = null;
         }
     }
 
-    updateEntity() {
-        if (this.sprite && this.sprite.body) {
+    get estaVivo(): boolean {
+        return !this.isDead && this.stats.salud > 0;
+    }
+
+    /**
+     * Aplica daño confirmado por el servidor (hp autoritativo).
+     * El cliente nunca calcula HP: lo sincroniza y muestra muerte si llega a 0.
+     */
+    public applyServerDamage(hp: number, maxHp: number) {
+        if (this.isDead) return;
+        this.stats.maxSalud = Math.max(1, maxHp);
+        this.stats.salud = Math.max(0, Math.min(this.stats.maxSalud, hp));
+        if (this.sprite?.active) {
+            this.sprite.setTint(0xff6666);
+            this.sprite.scene.time.delayedCall(150, () => {
+                if (this.sprite?.active && !this.isDead) this.sprite.clearTint();
+            });
+        }
+        if (this.stats.salud <= 0) this.morir();
+    }
+
+    /** Muerte real: animación de muerte del sprite compartido + desaparición. */
+    public morir() {
+        if (this.isDead) return;
+        this.isDead = true;
+        console.log(`[Survivor] ${this.nombre} (${this.id}) ha muerto`);
+        if (this.sprite) {
+            const s = this.sprite;
+            s.disableInteractive();
+            const body = s.body as Phaser.Physics.Arcade.Body | undefined;
+            body?.setVelocity(0);
+            // Animación de muerte (sprites compartidos humano: npc_death_*)
+            s.die();
+            s.destroyBars();
+            s.scene.time.delayedCall(900, () => {
+                this.desinstanciarSprite();
+            });
+        }
+        window.dispatchEvent(new CustomEvent('phaser-npc-died' as any, { detail: { id: this.id } }));
+    }
+
+    updateEntity(ghosts?: CombatTargetLike[], deadDragons?: CombatTargetLike[]) {
+        if (!this.sprite || this.isDead) return;
+        if (this.sprite.body) {
+            // Barras en porcentaje sobre los máximos
+            this.sprite.syncBars(this.stats.salud, this.stats.maxSalud, this.stats.energia, this.stats.maxEnergia);
+            // Defensa: golpea al enemigo cercano (daño base 10 validado por el servidor)
+            this.tryDefend(ghosts, deadDragons);
             // Si está en acción (salto/dash/ataque) no forzar idle
             if (this.isJumping || this.isDashing || (this.sprite && CombatSystem.isAttacking(this.sprite))) return;
             const body = this.sprite.body as Phaser.Physics.Arcade.Body;
             body.setVelocity(0);
             this.sprite.idle();
         }
+    }
+
+    /** Los seguidores se defienden si un enemigo entra en rango (no persiguen). */
+    private tryDefend(ghosts?: CombatTargetLike[], deadDragons?: CombatTargetLike[]) {
+        if (!this.sprite || this.isJumping || this.isDashing || CombatSystem.isAttacking(this.sprite)) return;
+        type Cand = { id: string; kind: 'ghost' | 'dead-dragon'; x: number; y: number; d: number };
+        const sx = this.sprite.x, sy = this.sprite.y;
+        let best: Cand | null = null;
+        const pools: { arr: CombatTargetLike[] | undefined; kind: Cand['kind']; skipAllies: boolean }[] = [
+            { arr: ghosts, kind: 'ghost', skipAllies: false },
+            { arr: deadDragons, kind: 'dead-dragon', skipAllies: true },
+        ];
+        for (const pool of pools) {
+            for (const e of pool.arr ?? []) {
+                if (!e.estaVivo || !e.sprite || !e.sprite.active) continue;
+                if (pool.skipAllies && e.isAlly) continue;
+                const d = Math.hypot(e.sprite.x - sx, e.sprite.y - sy);
+                if (d <= SURVIVOR_DEFENSE_RANGE && (!best || d < best.d)) {
+                    best = { id: e.id, kind: pool.kind, x: e.sprite.x, y: e.sprite.y, d };
+                }
+            }
+        }
+        if (!best) return;
+        const now = this.sprite.scene.time.now;
+        if (now - this.lastDefenseAt < SURVIVOR_DEFENSE_COOLDOWN) return;
+        this.lastDefenseAt = now;
+        this.atacar();
+        reportCombatHit({
+            attackerId: this.id,
+            attackerKind: 'survivor',
+            targetId: best.id,
+            targetKind: best.kind,
+            attackerX: sx,
+            attackerY: sy,
+            targetX: best.x,
+            targetY: best.y,
+        });
     }
 
     /** API escalable para IA/movimiento: mueve y anima walk en cualquier dirección 8 */

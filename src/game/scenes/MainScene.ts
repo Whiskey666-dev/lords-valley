@@ -8,7 +8,7 @@ import { initAllCharacterAnimations } from "../../characters/Animations";
 import { isGameInputBlocked, isActionJustDown } from "../../ui/input/KeyBindings";
 import * as InputSystem from "../systems/InputSystem";
 import { setupCamera, updateCamera } from "../systems/CameraSystem";
-import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts, requestServerGhostSpawn, initCombatSocket } from "../systems/SpawnSystem";
+import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts, requestServerGhostSpawn, initCombatSocket, findSafeSpawnPos, clampToIsoWorld } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
 import { CameraController } from "../systems/CameraController";
 import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_H } from "../world/Terrain";
@@ -22,8 +22,15 @@ import { TerrainOcclusionSystem } from "../systems/TerrainOcclusionSystem";
 import { savePlayerPos } from "../../app/api/player.api";
 import { setGameMode as apiSetGameMode } from "../../app/api/settlement.api";
 import { useGameStore } from "../../app/store/useGameStore";
-import { getSocket, getCombatSocket } from "../../app/socket";
+import { getSocket, getCombatSocket, reportGhostDamage, reportCombatHit, reportRespawn, playerEntityId } from "../../app/socket";
+import { CombatSystem } from "../../combat/CombatSystem";
+import type { DragonCombatCtx } from "../../characters/DeadDragon";
 import { SaveSystem } from "../../save/SaveSystem";
+
+/** Daño base del jugador (lo reporta el cliente; el servidor lo acota a 200) */
+const PLAYER_MELEE_DAMAGE = 50;
+const PLAYER_MELEE_RANGE_GHOST = 150;
+const PLAYER_MELEE_RANGE_DRAGON = 180;
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -45,6 +52,30 @@ export class MainScene extends Phaser.Scene {
   private lastCameraY = 0;
   /** ID del settlement actual — requerido para operaciones server-side (ghost spawn, game mode) */
   private settlementId: string | null = null;
+
+  /**
+   * Resuelve el settlement desde el store hidratado o localStorage.
+   * Sin esto los ghosts caen al fallback local (sin registro en servidor)
+   * y el servidor rechaza todo su combate con ghost_not_found_or_dead.
+   */
+  private resolveSettlementId(): string | null {
+    try {
+      const fromStore = (useGameStore as any).getState?.()?.settlement?.id as string | undefined;
+      const fromLs = localStorage.getItem("settlementId");
+      const sid = fromStore ?? fromLs ?? null;
+      if (sid) {
+        this.settlementId = sid;
+        (window as any).__SETTLEMENT_ID__ = sid;
+      }
+      return sid;
+    } catch {
+      return this.settlementId;
+    }
+  }
+  /** Punto donde el jugador apareció por primera vez: respawn al morir */
+  private firstSpawnPos: { x: number; y: number } | null = null;
+  private playerDead = false;
+  private prevPlayerAttacking = false;
 
   constructor() { super("MainScene"); }
 
@@ -70,6 +101,7 @@ export class MainScene extends Phaser.Scene {
       this.dynamicLayer = new DynamicLayer(this);
 
       this.spawnPlayer();
+      this.resolveSettlementId();
       this.setupNpcListeners();
       this.setupDeadDragonListeners();
       this.setupGhostListeners();
@@ -103,14 +135,20 @@ export class MainScene extends Phaser.Scene {
 
   private setupNpcListeners(): void {
     const onSpawnRequest = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ count: number }>).detail;
       const count = detail?.count ?? 1;
-      spawnNpcs(this, count, this.player, this.npcs);
-      this.npcs.slice(-count).forEach(n => { if (n.sprite) this.dynamicLayer.add(n.sprite as any); });
-      this.saveFullGameState();
+      // Con settlementId los NPCs nacen server-side (UUID reales); sin él, fallback local.
+      const sid = this.settlementId ?? this.resolveSettlementId() ?? undefined;
+      void spawnNpcs(this, count, this.player, this.npcs, sid).then(() => {
+        if (!this.sceneAlive) return;
+        this.npcs.slice(-count).forEach(n => { if (n.sprite) this.dynamicLayer.add(n.sprite as any); });
+        this.saveFullGameState();
+      });
     };
 
     const onFocusNpc = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ id: string; x?: number; y?: number }>).detail;
       if (!detail) return;
       const target = this.npcs.find(n => n.id === detail.id);
@@ -132,9 +170,19 @@ export class MainScene extends Phaser.Scene {
 
     window.addEventListener("phaser-create-npcs", onSpawnRequest as EventListener);
     window.addEventListener("phaser-focus-npc", onFocusNpc as EventListener);
+    // Muerte real: filtra el caído, cierra su panel y guarda
+    const onNpcDied = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (!detail) return;
+      this.npcs = this.npcs.filter(n => n.id !== detail.id || n.estaVivo);
+      window.dispatchEvent(new CustomEvent("phaser-npc-deselected"));
+      this.saveFullGameState();
+    };
+    window.addEventListener("phaser-npc-died" as any, onNpcDied as EventListener);
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener("phaser-create-npcs", onSpawnRequest as EventListener);
       window.removeEventListener("phaser-focus-npc", onFocusNpc as EventListener);
+      window.removeEventListener("phaser-npc-died" as any, onNpcDied as EventListener);
       this.npcs.forEach(n => n.desinstanciarSprite());
       this.npcs = [];
     });
@@ -142,6 +190,7 @@ export class MainScene extends Phaser.Scene {
 
   private setupDeadDragonListeners(): void {
     const onSpawnDragons = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ count: number; isAlly: boolean }>).detail;
       const count = detail?.count ?? 1;
       const isAlly = detail?.isAlly ?? true;
@@ -151,6 +200,7 @@ export class MainScene extends Phaser.Scene {
     };
 
     const onFocusDragon = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ id: string; x?: number; y?: number }>).detail;
       if (!detail) return;
       const target = this.deadDragons.find(d => d.id === detail.id);
@@ -180,6 +230,7 @@ export class MainScene extends Phaser.Scene {
     };
 
     const onDamageDragon = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ id: string; cantidad: number }>).detail;
       if (!detail) return;
       const target = this.deadDragons.find(d => d.id === detail.id);
@@ -268,6 +319,15 @@ export class MainScene extends Phaser.Scene {
     };
 
     window.addEventListener("phaser-create-dead-dragons" as any, onSpawnDragons as EventListener);
+    // Muerte real: filtra el caído, cierra su panel y guarda
+    const onDragonDied = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (!detail) return;
+      this.deadDragons = this.deadDragons.filter(d => d.id !== detail.id || d.estaVivo);
+      window.dispatchEvent(new CustomEvent("phaser-dead-dragon-deselected" as any));
+      this.saveFullGameState();
+    };
+    window.addEventListener("phaser-dead-dragon-died" as any, onDragonDied as EventListener);
     window.addEventListener("phaser-focus-dead-dragon" as any, onFocusDragon as EventListener);
     window.addEventListener("phaser-dead-dragon-set-order" as any, onSetOrder as EventListener);
     window.addEventListener("phaser-dead-dragon-set-comportamiento" as any, onSetComportamiento as EventListener);
@@ -282,6 +342,7 @@ export class MainScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener("phaser-create-dead-dragons" as any, onSpawnDragons as EventListener);
+      window.removeEventListener("phaser-dead-dragon-died" as any, onDragonDied as EventListener);
       window.removeEventListener("phaser-focus-dead-dragon" as any, onFocusDragon as EventListener);
       window.removeEventListener("phaser-dead-dragon-set-order" as any, onSetOrder as EventListener);
       window.removeEventListener("phaser-dead-dragon-set-comportamiento" as any, onSetComportamiento as EventListener);
@@ -312,55 +373,106 @@ export class MainScene extends Phaser.Scene {
     };
   }
 
-  // ── Ghost listeners + comandos de consola createGhost1/2/3 ────────────────
+  // ── Ghost listeners + comandos de consola spawnGhost1/2/3 ────────────────
   private setupGhostListeners(): void {
     // ── Listener para spawn de ghosts desde UI (delega al servidor) ──
     const onSpawnGhosts = (e: Event) => {
       const detail = (e as CustomEvent<{ count: number }>).detail;
       const count = detail?.count ?? 1;
+      // Re-resuelve por si el store se hidrató después del create
+      const sid = this.settlementId ?? this.resolveSettlementId() ?? undefined;
+      if (sid) initCombatSocket(sid);
       // Solicitar al servidor en lugar de generar localmente
-      requestServerGhostSpawn(count, this.settlementId ?? undefined);
+      requestServerGhostSpawn(count, sid);
     };
 
+    // ── Render de ghosts autoritativos del servidor (coords iso) ──
+    // Unifica 'ghost:spawned' y 'ghost:active_list': crea solo los que no existen
+    // (dedupe por id) y acota al mundo iso. El servidor es la autoridad del HP/stats.
     // ── Listener 'ghost:spawned' del servidor (WebSocket /combat namespace) ──
     // El servidor genera IDs UUID y stats canónicos; el cliente crea el sprite de rendering.
+    // Registro idempotente: el socket es singleton y puede haber listeners de una
+    // escena anterior; el off previo evita duplicados y el guard la escena muerta.
     const combatSock = getCombatSocket();
+    combatSock.off('ghost:spawned');
+    combatSock.off('ghost:active_list');
+    combatSock.off('ghost:died');
+    combatSock.off('ghost:damage_result');
+    combatSock.off('combat:hit_result');
+    combatSock.off('combat:died');
+    combatSock.off('player:damage_result');
     combatSock.on('ghost:spawned', (data: { ghosts: any[]; settlementId: string }) => {
+      if (!this.sceneAlive) return;
       if (!data?.ghosts) return;
-      for (const ghostData of data.ghosts) {
-        const ghost = Ghost.fromServerData(ghostData);
-        const spawnX = ghostData.positionX ?? this.player?.x ?? 3072;
-        const spawnY = ghostData.positionY ?? this.player?.y ?? 3072;
-        ghost.instanciarSprite(this, spawnX, spawnY);
-        this.ghosts.push(ghost);
-        if (ghost.sprite) {
-          this.dynamicLayer?.add(ghost.sprite as any);
-          console.log(`[MainScene] Ghost ${ghost.id} [server] en (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
-        }
-      }
+      const added = this.renderServerGhosts(data.ghosts);
       window.dispatchEvent(new CustomEvent("phaser-ghosts-spawned" as any, {
-        detail: { count: data.ghosts.length, total: this.ghosts.length }
+        detail: { count: added, total: this.ghosts.length }
       }));
       this.saveFullGameState();
     });
 
+    // ── Lista de ghosts activos al unirse al room ──
+    // El servidor vive en memoria: tras recargar la página los ghosts anteriores
+    // siguen activos allí; sin este render serían atacantes invisibles.
+    combatSock.on('ghost:active_list', (data: { ghosts: any[]; settlementId: string }) => {
+      if (!this.sceneAlive) return;
+      if (!data?.ghosts || data.ghosts.length === 0) return;
+      const added = this.renderServerGhosts(data.ghosts);
+      if (added > 0) {
+        console.log(`[MainScene] ${added} ghost(s) activos re-renderizados del servidor`);
+        window.dispatchEvent(new CustomEvent("phaser-ghosts-spawned" as any, {
+          detail: { count: added, total: this.ghosts.length }
+        }));
+        this.saveFullGameState();
+      }
+    });
+
     // ── Listener 'ghost:died' del servidor ──
     combatSock.on('ghost:died', (data: { ghostId: string }) => {
+      if (!this.sceneAlive) return;
       this.ghosts = this.ghosts.filter(g => g.id !== data.ghostId || g.estaVivo);
       this.saveFullGameState();
     });
 
+    // ── Listener 'ghost:damage_result' — HP autoritativo del ghost ──
+    // El cliente sincroniza el HP del servidor (nunca lo calcula). Si muere, morir() lo desvanece.
+    combatSock.on('ghost:damage_result', (result: { applied: boolean; ghostId: string; newHp: number; isDead: boolean }) => {
+      if (!this.sceneAlive) return;
+      if (!result.applied || typeof result.newHp !== 'number') return;
+      const ghost = this.ghosts.find(g => g.id === result.ghostId);
+      if (ghost) ghost.applyServerDamage(result.newHp);
+    });
+
+    // ── Listener 'combat:hit_result' — golpes genéricos validados por el servidor ──
+    combatSock.on('combat:hit_result', (result: { applied: boolean; damage: number; targetId: string; targetKind: string; targetHp: number; targetMaxHp: number; isDead: boolean }) => {
+      if (!this.sceneAlive) return;
+      if (!result.applied || typeof result.targetHp !== 'number' || typeof result.targetKind !== 'string') return;
+      this.applyCombatHitResult(result.targetKind, result.targetId, result.targetHp, result.targetMaxHp);
+    });
+
+    // ── Listener 'combat:died' (broadcast) — asegura la muerte en todos los clientes ──
+    combatSock.on('combat:died', (data: { targetId: string; targetKind: string }) => {
+      if (!this.sceneAlive) return;
+      if (data.targetKind === 'player') {
+        this.onPlayerDiedFromServer();
+        return;
+      }
+      this.applyCombatHitResult(data.targetKind, data.targetId, 0);
+    });
     // ── Listener 'player:damage_result' — daño solo se aplica si el servidor lo confirma ──
-    combatSock.on('player:damage_result', (result: { applied: boolean; amount: number; targetId: string; rejectedReason?: string }) => {
+    combatSock.on('player:damage_result', (result: { applied: boolean; amount: number; targetId: string; rejectedReason?: string; targetHp?: number; isDead?: boolean }) => {
+      if (!this.sceneAlive) return;
       if (!result.applied) {
-        if (result.rejectedReason && result.rejectedReason !== 'creative_mode') {
+        if (result.rejectedReason && result.rejectedReason !== 'creative_mode' && result.rejectedReason !== 'god_mode' && result.rejectedReason !== 'target_dead') {
           console.warn('[MainScene] Daño rechazado por servidor:', result.rejectedReason);
         }
         (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: false, pendingServerConfirmation: false };
         return;
       }
-      if (this.player && typeof (this.player as any).recibirDano === 'function') {
-        (this.player as any).recibirDano(result.amount);
+      if (typeof result.targetHp === 'number') {
+        this.applyPlayerDamage(result.targetHp);
+      } else if (this.player && !this.playerDead) {
+        if (this.player.recibirDano(result.amount) && !this.playerDead) this.playerDeathSeq();
       }
       (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, amount: result.amount, pendingServerConfirmation: false };
       console.log(`[MainScene] Daño confirmado por servidor: ${result.amount}`);
@@ -368,6 +480,7 @@ export class MainScene extends Phaser.Scene {
 
     // ── Fallback local para spawn sin settlementId (offline/debug) ──
     const onSpawnGhostsLocal = (e: Event) => {
+      if (!this.sceneAlive) return;
       const detail = (e as CustomEvent<{ count: number }>).detail;
       const count = detail?.count ?? 1;
       const prevLen = this.ghosts.length;
@@ -388,19 +501,34 @@ export class MainScene extends Phaser.Scene {
     window.addEventListener('phaser-create-ghosts' as any, onSpawnGhosts as EventListener);
     window.addEventListener('phaser-ghost-died' as any, onGhostDied as EventListener);
 
+    // ── GodMode (comando GodModeOn/Off, validado por el servidor) ──
+    // El servidor rechaza el daño (rejectedReason 'god_mode'); aquí solo se guarda
+    // el flag para que otros sistemas cliente puedan consultarlo.
+    const onGodMode = (e: Event) => {
+      const detail = (e as CustomEvent<{ on: boolean }>).detail;
+      (window as any).__GOD_MODE__ = detail?.on === true;
+      console.log(`[MainScene] GodMode: ${(window as any).__GOD_MODE__ ? 'ON' : 'OFF'} (servidor)`);
+    };
+    window.addEventListener('phaser-godmode' as any, onGodMode as EventListener);
+
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener('phaser-create-ghosts' as any, onSpawnGhosts as EventListener);
       window.removeEventListener('phaser-create-ghosts-local' as any, onSpawnGhostsLocal as EventListener);
       window.removeEventListener('phaser-ghost-died' as any, onGhostDied as EventListener);
+      window.removeEventListener('phaser-godmode' as any, onGodMode as EventListener);
       combatSock.off('ghost:spawned');
+      combatSock.off('ghost:active_list');
       combatSock.off('ghost:died');
+      combatSock.off('ghost:damage_result');
+      combatSock.off('combat:hit_result');
+      combatSock.off('combat:died');
       combatSock.off('player:damage_result');
       this.ghosts.forEach(g => g.desinstanciarSprite());
       this.ghosts = [];
-      delete (window as any).createGhost;
-      delete (window as any).createGhost1;
-      delete (window as any).createGhost2;
-      delete (window as any).createGhost3;
+      delete (window as any).spawnGhost;
+      delete (window as any).spawnGhost1;
+      delete (window as any).spawnGhost2;
+      delete (window as any).spawnGhost3;
       delete (window as any).ghosts;
       delete (window as any).__GHOSTS__;
       delete (window as any).__GHOST_API__;
@@ -454,10 +582,10 @@ export class MainScene extends Phaser.Scene {
       return `✓ ${count} Ghost(s) solicitados al servidor`;
     };
 
-    (window as any).createGhost = (n = 1) => dispatchGhost(n);
-    (window as any).createGhost1 = () => dispatchGhost(1);
-    (window as any).createGhost2 = () => dispatchGhost(2);
-    (window as any).createGhost3 = () => dispatchGhost(3);
+    (window as any).spawnGhost = (n = 1) => dispatchGhost(n);
+    (window as any).spawnGhost1 = () => dispatchGhost(1);
+    (window as any).spawnGhost2 = () => dispatchGhost(2);
+    (window as any).spawnGhost3 = () => dispatchGhost(3);
     (window as any).ghosts = this.ghosts;
     (window as any).__GHOSTS__ = this.ghosts;
     (window as any).__GHOST_API__ = {
@@ -466,7 +594,147 @@ export class MainScene extends Phaser.Scene {
       kill: (id: string) => { const g = this.ghosts.find(g => g.id === id); if (g) g.recibirDano(9999); },
     };
 
-    console.log('[MainScene] Ghost listeners OK (servidor). Comandos: createGhost1/2/3 | CreativeMode | SurvivalMode | saveGame | clearSave');
+    console.log('[MainScene] Ghost listeners OK (servidor). Comandos: spawnGhost1/2/3 | CreativeMode | SurvivalMode | saveGame | clearSave');
+  }
+
+  /**
+   * Crea sprites para ghosts autoritativos del servidor.
+   * Deduplica por id (spawn + active_list pueden solaparse) y acota al mundo iso.
+   * Retorna cuántos se añadieron.
+   */
+  private renderServerGhosts(ghostList: any[]): number {
+    let added = 0;
+    for (const ghostData of ghostList) {
+      if (!ghostData?.id) continue;
+      if (this.ghosts.some(g => g.id === ghostData.id)) continue;
+      const ghost = Ghost.fromServerData(ghostData);
+      const fallback = this.player ? { x: this.player.x, y: this.player.y } : { x: 6144, y: 3072 };
+      const rawX = typeof ghostData.positionX === 'number' ? ghostData.positionX : fallback.x;
+      const rawY = typeof ghostData.positionY === 'number' ? ghostData.positionY : fallback.y;
+      const { x: spawnX, y: spawnY } = clampToIsoWorld(rawX, rawY);
+      ghost.instanciarSprite(this, spawnX, spawnY);
+      this.ghosts.push(ghost);
+      if (ghost.sprite) {
+        this.dynamicLayer?.add(ghost.sprite as any);
+        console.log(`[MainScene] Ghost ${ghost.id} [server] en (${spawnX.toFixed(0)}, ${spawnY.toFixed(0)})`);
+        added++;
+      }
+    }
+    return added;
+  }
+
+  /**
+   * El socket de combate es singleton entre instancias del juego (StrictMode
+   * monta dos juegos en dev, HMR, re-auth). Un listener de una escena ya
+   * destruida (`scene.sys === null`) debe ignorar el evento: si tocara Phaser
+   * reventaría (`queueDepthSort` de null) e impediría que la escena viva lo procese.
+   */
+  private get sceneAlive(): boolean {
+    try {
+      const sys = this.sys as Phaser.Scenes.Systems | null | undefined;
+      return !!sys && typeof sys.isActive === 'function' && sys.isActive();
+    } catch {
+      return false;
+    }
+  }
+
+  // ── Daño validado por el servidor: aplica HP a NPCs/mobs ──
+  // El cliente nunca calcula HP: sincroniza el valor autoritativo y la entidad
+  // muestra barras en porcentaje y muere/desaparece si llega a 0.
+  private applyCombatHitResult(targetKind: string, targetId: string, targetHp: number, targetMaxHp?: number): void {    if (targetKind === 'survivor') {
+      const npc = this.npcs.find(n => n.id === targetId);
+      if (npc) npc.applyServerDamage(targetHp, targetMaxHp ?? npc.stats.maxSalud);
+    } else if (targetKind === 'dead-dragon') {
+      const dragon = this.deadDragons.find(d => d.id === targetId);
+      if (dragon) dragon.applyServerDamage(targetHp, targetMaxHp ?? dragon.stats.maxSalud);
+    } else if (targetKind === 'ghost') {
+      const ghost = this.ghosts.find(g => g.id === targetId);
+      if (ghost) ghost.applyServerDamage(targetHp);
+    } else if (targetKind === 'player') {
+      this.applyPlayerDamage(targetHp);
+    }
+  }
+
+  // ── Player: daño, muerte con animación y respawn en el punto inicial ──
+  private applyPlayerDamage(targetHp: number): void {
+    if (!this.player || this.playerDead) return;
+    this.player.applyServerDamage(targetHp, this.player.maxSalud);
+    if (!this.player.estaVivo) this.playerDeathSeq();
+  }
+
+  private onPlayerDiedFromServer(): void {
+    if (!this.player || this.playerDead) return;
+    this.playerDeathSeq();
+  }
+
+  private playerDeathSeq(): void {
+    if (!this.player || this.playerDead) return;
+    this.playerDead = true;
+    this.player.morir();
+    window.dispatchEvent(new CustomEvent('phaser-player-died' as any));
+    console.log('[MainScene] ☠️ El jugador ha muerto. Respawn en 1.6s...');
+    this.time.delayedCall(1600, () => {
+      if (!this.player) return;
+      const spawn = this.firstSpawnPos ?? { x: this.player.x, y: this.player.y };
+      this.player.respawn(spawn.x, spawn.y);
+      reportRespawn(playerEntityId(), 'player');
+      this.playerDead = false;
+      if (this.cameraFollow) this.cameras.main.centerOn(spawn.x, spawn.y);
+      this.saveFullGameState();
+      window.dispatchEvent(new CustomEvent('phaser-player-respawned' as any, { detail: { ...spawn } }));
+    });
+  }
+
+  // ── Player ataca: reporta el golpe al servidor (él valida y decreta) ──
+  private playerMeleeStrike(): void {
+    if (!this.player || this.playerDead) return;
+    const px = this.player.x, py = this.player.y;
+    let bestGhost: { id: string; d: number } | null = null;
+    for (const g of this.ghosts) {
+      if (!g.estaVivo || !g.sprite?.active) continue;
+      const d = Math.hypot(g.sprite.x - px, g.sprite.y - py);
+      if (d <= PLAYER_MELEE_RANGE_GHOST && (!bestGhost || d < bestGhost.d)) bestGhost = { id: g.id, d };
+    }
+    let bestDragon: { id: string; x: number; y: number; d: number } | null = null;
+    for (const d of this.deadDragons) {
+      if (d.isAlly || !d.estaVivo || !d.sprite?.active) continue;
+      const dd = Math.hypot(d.sprite.x - px, d.sprite.y - py);
+      if (dd <= PLAYER_MELEE_RANGE_DRAGON && (!bestDragon || dd < bestDragon.d)) {
+        bestDragon = { id: d.id, x: d.sprite.x, y: d.sprite.y, d: dd };
+      }
+    }
+    // Sin fuego amigo: solo fantasmas y dragones enemigos
+    if (bestGhost && (!bestDragon || bestGhost.d <= bestDragon.d)) {
+      reportGhostDamage({
+        ghostId: bestGhost.id,
+        amount: PLAYER_MELEE_DAMAGE,
+        attackerId: playerEntityId(),
+        attackerX: px,
+        attackerY: py,
+      });
+    } else if (bestDragon) {
+      reportCombatHit({
+        attackerId: playerEntityId(),
+        attackerKind: 'player',
+        targetId: bestDragon.id,
+        targetKind: 'dead-dragon',
+        attackerX: px,
+        attackerY: py,
+        targetX: bestDragon.x,
+        targetY: bestDragon.y,
+        amount: PLAYER_MELEE_DAMAGE,
+      });
+    }
+  }
+
+  private buildDragonCtx(): DragonCombatCtx {
+    return {
+      player: this.player ? { x: this.player.x, y: this.player.y } : null,
+      playerAlive: !!this.player && !this.playerDead,
+      npcs: this.npcs,
+      ghosts: this.ghosts,
+      dragons: this.deadDragons,
+    };
   }
 
   private setupWorld(): void {
@@ -494,6 +762,9 @@ export class MainScene extends Phaser.Scene {
     this.dynamicLayer?.add(this.player as any);
 
     console.log("[MainScene] Player spawneado en", this.player.x.toFixed(0), this.player.y.toFixed(0));
+    // Punto de respawn: donde apareció por primera vez
+    this.firstSpawnPos = { x: this.player.x, y: this.player.y };
+    this.playerDead = false;
     this.time.addEvent({
       delay: 5000,
       loop: true,
@@ -502,9 +773,23 @@ export class MainScene extends Phaser.Scene {
         this.saveFullGameState();
       },
     });
-    window.addEventListener('beforeunload', () => {
+    // Guardado al salir: beforeunload + pagehide + visibilitychange (los móviles y la
+    // navegación SPA no siempre disparan beforeunload). El guard sceneAlive impide que
+    // una escena destruida (StrictMode/HMR) sobrescriba con arrays vacíos, y el SHUTDOWN
+    // elimina los listeners para no acumular closured muertos.
+    const saveOnExit = () => {
+      if (!this.sceneAlive) return;
       this.savePlayerPos();
       this.saveFullGameState();
+    };
+    const onVisibilityHidden = () => { if (document.visibilityState === 'hidden') saveOnExit(); };
+    window.addEventListener('beforeunload', saveOnExit);
+    window.addEventListener('pagehide', saveOnExit);
+    document.addEventListener('visibilitychange', onVisibilityHidden);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('beforeunload', saveOnExit);
+      window.removeEventListener('pagehide', saveOnExit);
+      document.removeEventListener('visibilitychange', onVisibilityHidden);
     });
   }
 
@@ -538,6 +823,7 @@ export class MainScene extends Phaser.Scene {
       const save = SaveSystem.load();
       if (!save) {
         console.log('[MainScene] No se encontró partida guardada previa. Iniciando partida nueva.');
+        this.startNewGameSpawns();
         return;
       }
 
@@ -566,39 +852,61 @@ export class MainScene extends Phaser.Scene {
         }
       }
 
-      // Restaurar NPCs (Survivors): Prioridad 1: Servidor (autoridad total), Prioridad 2: save.npcs local fallback
-      if (storeSettlement?.survivors && Array.isArray(storeSettlement.survivors) && storeSettlement.survivors.length > 0) {
-        console.log(`[MainScene] 🛡️ Restaurando ${storeSettlement.survivors.length} NPCs autoritativos desde el backend...`);
-        for (const sData of storeSettlement.survivors) {
+      // Restaurar NPCs (Survivors): el servidor es autoridad de identidad/stats,
+      // el guardado local es autoridad de la ÚLTIMA POSICIÓN iso.
+      // Se restauran TODOS: los del servidor + los locales que el servidor no conoce.
+      const serverSurvivors = (storeSettlement?.survivors && Array.isArray(storeSettlement.survivors))
+        ? storeSettlement.survivors
+        : [];
+      const serverIds = new Set(serverSurvivors.map((s: any) => s?.id).filter(Boolean));
+      if (serverSurvivors.length > 0) {
+        console.log(`[MainScene] 🛡️ Restaurando ${serverSurvivors.length} NPCs autoritativos desde el backend...`);
+        for (const sData of serverSurvivors) {
+          if (!sData?.id) continue;
           const localCache = save.npcs?.find((n: any) => n.id === sData.id);
-          const posX = localCache?.x ?? (sData.positionX ?? 0);
-          const posY = localCache?.y ?? (sData.positionY ?? 0);
           const surv = Survivor.fromServerData(sData);
-          surv.instanciarSprite(this, posX, posY);
+          // Última posición guardada (iso) si es válida; si no, punto seguro fresco.
+          // NUNCA la positionX del servidor: vive en espacio tile (zona oeste en iso).
+          const cached = localCache && typeof localCache.x === 'number' && typeof localCache.y === 'number'
+            && !(localCache.x === 0 && localCache.y === 0)
+            ? clampToIsoWorld(localCache.x, localCache.y)
+            : null;
+          const otherSprites = this.npcs.map(n => n.sprite).filter(Boolean) as (Phaser.GameObjects.GameObject & { x: number; y: number })[];
+          const pos = cached ?? findSafeSpawnPos(
+            this.player as unknown as Phaser.GameObjects.GameObject & { x: number; y: number },
+            80, 220, otherSprites, 50,
+          );
+          surv.instanciarSprite(this, pos.x, pos.y);
           this.npcs.push(surv);
           if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
         }
-        window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: this.npcs.length, total: this.npcs.length } }));
-      } else if (save.npcs && save.npcs.length > 0) {
-        for (const data of save.npcs) {
-          const surv = new Survivor();
-          surv.id = data.id;
-          surv.nombre = data.nombre;
-          surv.edad = data.edad;
-          surv.profesion = data.profesion;
-          surv.stats.salud = data.salud;
-          surv.stats.maxSalud = data.maxSalud;
-          surv.stats.energia = data.energia;
-          if (typeof data.hambre === 'number') surv.needs.hambre = data.hambre;
-          if (typeof data.sed === 'number') surv.needs.sed = data.sed;
-          if (typeof data.sueno === 'number') surv.needs.sueno = data.sueno;
-          if (typeof data.lealtad === 'number') surv.loyalty.nivel = data.lealtad;
+      }
+      // NPCs solo-locales (fallback offline o de otra sesión): también se restauran
+      const localOnly = (save.npcs ?? []).filter((n: any) => n?.id && !serverIds.has(n.id));
+      for (const data of localOnly) {
+        if (typeof data.x !== 'number' || typeof data.y !== 'number') continue;
+        const surv = new Survivor();
+        surv.id = data.id;
+        surv.nombre = data.nombre;
+        surv.edad = data.edad;
+        surv.profesion = data.profesion;
+        // HP canónico del servidor (200/50); partidas viejas traían aleatorios
+        surv.stats.maxSalud = 200;
+        surv.stats.salud = Math.max(0, Math.min(200, data.salud ?? 200));
+        surv.stats.maxEnergia = 50;
+        surv.stats.energia = Math.max(0, Math.min(50, data.energia ?? 50));
+        if (typeof data.hambre === 'number') surv.needs.hambre = data.hambre;
+        if (typeof data.sed === 'number') surv.needs.sed = data.sed;
+        if (typeof data.sueno === 'number') surv.needs.sueno = data.sueno;
+        if (typeof data.lealtad === 'number') surv.loyalty.nivel = data.lealtad;
 
-          surv.instanciarSprite(this, data.x, data.y);
-          this.npcs.push(surv);
-          if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
-        }
-        window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: save.npcs.length, total: this.npcs.length } }));
+        const { x, y } = clampToIsoWorld(data.x, data.y);
+        surv.instanciarSprite(this, x, y);
+        this.npcs.push(surv);
+        if (surv.sprite) this.dynamicLayer.add(surv.sprite as any);
+      }
+      if (this.npcs.length > 0) {
+        window.dispatchEvent(new CustomEvent('phaser-npcs-spawned', { detail: { count: this.npcs.length, total: this.npcs.length } }));
       }
 
       // Restaurar Dead Dragons
@@ -628,6 +936,26 @@ export class MainScene extends Phaser.Scene {
       // Esto previene que un jugador modifique su vida/cantidad o reviva enemigos muertos via devtools.
     } catch (e) {
       console.warn('[MainScene] Error al restaurar partida guardada', e);
+    }
+  }
+
+  /**
+   * Partida nueva: spawnea 1-3 Ghosts en puntos aleatorios del mapa.
+   * El flag en window evita duplicados cuando StrictMode monta dos escenas en dev;
+   * el guardado inmediato hace que un remontaje vea partida existente y no repita.
+   */
+  private startNewGameSpawns(): void {
+    try {
+      const w = window as any;
+      if (this.settlementId) initCombatSocket(this.settlementId);
+      if (!this.settlementId || w.__GHOSTS_AUTOSPAWNED__) return;
+      w.__GHOSTS_AUTOSPAWNED__ = true;
+      const count = 1 + Math.floor(Math.random() * 3);
+      console.log(`[MainScene] 👻 Partida nueva: spawneando ${count} ghost(s) aleatorios...`);
+      this.saveFullGameState();
+      requestServerGhostSpawn(count, this.settlementId);
+    } catch (e) {
+      console.warn('[MainScene] Error en spawns de partida nueva', e);
     }
   }
 
@@ -741,8 +1069,10 @@ export class MainScene extends Phaser.Scene {
         if (b) b.setVelocity(0);
         this.player.updateEntity();
       }
-      this.npcs.forEach(n => n.updateEntity());
-      this.deadDragons.forEach(d => d.updateEntity());
+      this.npcs = this.npcs.filter(n => n.estaVivo);
+      this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons));
+      this.deadDragons = this.deadDragons.filter(d => d.estaVivo);
+      this.deadDragons.forEach(d => d.updateEntity(this.buildDragonCtx()));
       this.ghosts = this.ghosts.filter(g => g.estaVivo);
       this.ghosts.forEach(g => g.updateEntity(
         this.player as unknown as Phaser.Physics.Arcade.Sprite,
@@ -773,12 +1103,21 @@ export class MainScene extends Phaser.Scene {
     if (InputSystem.isMissionsJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-action-missions"));
     if (InputSystem.isStatsJustPressed(this)) window.dispatchEvent(new CustomEvent("phaser-action-stats"));
 
-    if (this.player) {
+    if (this.player && !this.playerDead) {
       this.player.updateEntity();
       (window as any).__PLAYER_POS__ = { x: this.player.x, y: this.player.y };
+      // Flanco de subida del ataque: reporta UN golpe melee al servidor (él valida)
+      const atk = CombatSystem.isAttacking(this.player as unknown as Phaser.Physics.Arcade.Sprite);
+      if (atk && !this.prevPlayerAttacking) this.playerMeleeStrike();
+      this.prevPlayerAttacking = atk;
+    } else if (this.player) {
+      const b = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+      if (b) b.setVelocity(0);
+      this.prevPlayerAttacking = false;
     }
 
-    this.npcs.forEach(n => n.updateEntity());
+    this.npcs = this.npcs.filter(n => n.estaVivo);
+    this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons));
     const npcPositions = this.npcs
       .filter(n => n.sprite && n.sprite.active)
       .map(n => ({
@@ -788,7 +1127,8 @@ export class MainScene extends Phaser.Scene {
       }));
     (window as any).__NPCS_POS__ = npcPositions;
 
-    this.deadDragons.forEach(d => d.updateEntity());
+    this.deadDragons = this.deadDragons.filter(d => d.estaVivo);
+    this.deadDragons.forEach(d => d.updateEntity(this.buildDragonCtx()));
 
     // Actualizar Ghosts: IA de patrulla/persecución/ataque (delta ya viene del parámetro update)
     this.ghosts = this.ghosts.filter(g => g.estaVivo); // limpiar muertos

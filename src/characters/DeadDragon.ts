@@ -1,5 +1,21 @@
 import Phaser from "phaser";
-import { CHUNK_PX } from "../game/world/Terrain";
+import { playerEntityId, reportCombatHit } from "../app/socket";
+import type { CombatTargetLike } from "./Survivor";
+
+/** Contexto de combate que MainScene pasa cada frame (referencias, sin copiar) */
+export interface DragonCombatCtx {
+  player: { x: number; y: number } | null;
+  playerAlive: boolean;
+  npcs: CombatTargetLike[];
+  ghosts: CombatTargetLike[];
+  dragons: CombatTargetLike[];
+}
+
+/** IA de combate del dragón: enemigos persiguen; aliados solo en Agresivo/Defensivo */
+const DRAGON_DETECT_RANGE = 520;
+const DRAGON_ATTACK_RANGE = 95;
+const DRAGON_ATTACK_COOLDOWN = 2000;
+const DRAGON_CHASE_SPEED = 135;
 
 /**
  * DeadDragon.ts - NPC Dead Dragon
@@ -365,6 +381,7 @@ export class DeadDragon {
   private hogar: { x: number; y: number } | null = null;
 
   public sprite: DeadDragonSprite | null = null;
+  private isDead = false;
 
   // Posición hogar legacy para orden "Ve a casa" (compat)
   private homeX: number;
@@ -485,6 +502,33 @@ export class DeadDragon {
     }
   }
 
+  get estaVivo(): boolean {
+    return !this.isDead && this.stats.salud > 0;
+  }
+
+  /**
+   * Aplica daño confirmado por el servidor (hp autoritativo).
+   * El cliente nunca calcula HP: lo sincroniza y muestra muerte si llega a 0.
+   */
+  applyServerDamage(hp: number, maxHp: number) {
+    if (this.isDead) return;
+    this.stats.maxSalud = Math.max(1, maxHp);
+    this.stats.salud = Math.max(0, Math.min(this.stats.maxSalud, hp));
+    if (this.sprite) {
+      this.sprite.showHealthBar(5000);
+      this.sprite.updateHealthBar(this.stats.salud, this.stats.maxSalud);
+      this.sprite.setTint(0xff4444);
+      this.sprite.scene.time.delayedCall(200, () => {
+        if (this.sprite && !this.isDead) {
+          if (this.isAlly) this.sprite.clearTint();
+          else this.sprite.setTint(0xff9999);
+        }
+      });
+    }
+    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-updated" as any, { detail: this.getPaqueteUI() }));
+    if (this.stats.salud <= 0) this.morir();
+  }
+
   recibirDano(cantidad: number) {
     this.stats.recibirDano(cantidad);
     if (this.sprite) {
@@ -600,16 +644,28 @@ export class DeadDragon {
   }
 
   private morir() {
+    if (this.isDead) return;
+    this.isDead = true;
     console.log(`[DeadDragon] ${this.nombre} ha muerto`);
     if (this.sprite) {
-      this.sprite.setTint(0x555555);
-      this.sprite.setAlpha(0.6);
-      // Play death? no anim específica
+      const s = this.sprite;
+      s.disableInteractive();
+      const body = s.body as Phaser.Physics.Arcade.Body | undefined;
+      body?.setVelocity(0);
+      // Sin sheet de muerte: fundido + desaparición
+      s.scene.tweens.add({
+        targets: s,
+        alpha: 0,
+        duration: 600,
+        ease: 'Power2',
+        onComplete: () => { this.desinstanciarSprite(); },
+      });
     }
+    window.dispatchEvent(new CustomEvent("phaser-dead-dragon-died" as any, { detail: { id: this.id } }));
   }
 
-  updateEntity() {
-    if (!this.sprite || !this.sprite.body) return;
+  updateEntity(ctx?: DragonCombatCtx) {
+    if (!this.sprite || !this.sprite.body || this.isDead) return;
 
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
 
@@ -617,33 +673,17 @@ export class DeadDragon {
     this.sprite.updateHealthBarPosition();
     this.sprite.updateHealthBar(this.stats.salud, this.stats.maxSalud);
 
-    // — Comportamiento: lógica de combate (Agresivo/Defensivo/Pacifico) —
-    // Pacifico no ataca nunca; Defensivo solo si el jugador es atacado; Agresivo busca enemigos en 10 chunks del jugador
-    // Nota: 10 chunks = 10 * 1024 = 10240 px (cuadrados pequeños). Se usa para detección.
-    if (this.comportamiento === "Agresivo") {
-      const playerPos = (window as any).__PLAYER_POS__ as { x: number; y: number } | undefined;
-      if (playerPos) {
-        const enemyList = ((window as any).__DEAD_DRAGONS_POS__ as any[] | undefined)?.filter(e => !e.isAlly) ?? [];
-        // También considera NPCs enemigos si existieran — stub
-        const radius = 10 * CHUNK_PX;
-        const enemiesInRadius = enemyList.filter(e => Math.hypot(e.x - playerPos.x, e.y - playerPos.y) < radius);
-        if (enemiesInRadius.length > 0) {
-          // Placeholder: si hay enemigos en radio y función no es "Espera aqui" con prioridad, podría interceptar
-          // Por ahora solo log para debug; movimiento sigue controlado por Función
-          // Si la función es "Espera aqui" pero hay enemigos, Agresivo podría romper espera para atacar (opcional)
-          // Aquí mantenemos comportamiento separado de movimiento: no forzamos movimiento, solo marca intención
-          // Para demostrar, si hay enemigos y está en Espera, no se mueve (respeta Función). Combate real se delega a futuro CombatSystem.
-        }
-      }
-    } else if (this.comportamiento === "Defensivo") {
-      // Solo ataca si el jugador ha sido atacado — flag global __PLAYER_ATTACKED__ manejado por futuro Damage system
-      // Stub: consulta window.__PLAYER_WAS_ATTACKED__ (boolean + timestamp)
-      const wasAttacked = (window as any).__PLAYER_WAS_ATTACKED__ as { attacked: boolean; time: number } | undefined;
-      if (wasAttacked?.attacked && Date.now() - wasAttacked.time < 5000) {
-        // Ventana de 5s para contraatacar
-      }
+    // — IA de combate (daño base 500 validado por el servidor) —
+    // Enemigos: persiguen y atacan siempre. Aliados: solo en Agresivo
+    // (cazan enemigos) o Defensivo (contraatacan al agresor del jugador).
+    // Pacifico no ataca nunca.
+    if (!this.isAlly) {
+      if (ctx && this.combatAI(ctx)) return;
+      body.setVelocity(0);
+      this.sprite.playIdle();
+      return;
     }
-    // Pacifico: no hace nada
+    if (ctx && this.comportamiento !== "Pacifico" && this.combatAI(ctx)) return;
 
     // — Función: control de movimiento (Espera/Sigueme/Ve a casa) —
     switch (this.funcion) {
@@ -688,6 +728,97 @@ export class DeadDragon {
     // Si tiene "Ataques Fisicos" activo, usará Zarpaso/Mordida/Coletazo seleccionados, etc.
     // Por ahora solo se almacena y muestra en UI; el CombatSystem futuro filtrará por habilidadesActivas + habilidadesSeleccionadas.
   }
+
+  /**
+   * IA de combate. Retorna true si el combate tomó el control este frame
+   * (perseguir o atacar); false para que la Función decida el movimiento.
+   */
+  private combatAI(ctx: DragonCombatCtx): boolean {
+    if (!this.sprite) return false;
+    type T = { id: string; kind: 'player' | 'survivor' | 'dead-dragon' | 'ghost'; x: number; y: number };
+    const targets: T[] = [];
+    if (this.isAlly) {
+      if (this.comportamiento === "Agresivo") {
+        for (const g of ctx.ghosts) {
+          if (g.estaVivo && g.sprite?.active) targets.push({ id: g.id, kind: 'ghost', x: g.sprite.x, y: g.sprite.y });
+        }
+        for (const d of ctx.dragons) {
+          if (d.id !== this.id && d.isAlly === false && d.estaVivo && d.sprite?.active) {
+            targets.push({ id: d.id, kind: 'dead-dragon', x: d.sprite.x, y: d.sprite.y });
+          }
+        }
+      } else if (this.comportamiento === "Defensivo") {
+        // Contraataca al ghost que atacó al jugador si sigue cerca (ventana 8s)
+        const w = (window as any).__PLAYER_WAS_ATTACKED__ as { attacked: boolean; time: number; ghostId?: string } | undefined;
+        if (w?.attacked && w.ghostId && Date.now() - w.time < 8000) {
+          const g = ctx.ghosts.find(g => g.id === w.ghostId && g.estaVivo && g.sprite?.active);
+          if (g?.sprite) {
+            const d = Math.hypot(g.sprite.x - this.sprite.x, g.sprite.y - this.sprite.y);
+            if (d <= 450) {
+              this.engage({ id: g.id, kind: 'ghost', x: g.sprite.x, y: g.sprite.y }, d);
+              return true;
+            }
+          }
+        }
+        return false;
+      } else {
+        return false; // Pacifico: no ataca nunca
+      }
+    } else {
+      if (ctx.player && ctx.playerAlive) {
+        targets.push({ id: playerEntityId(), kind: 'player', x: ctx.player.x, y: ctx.player.y });
+      }
+      for (const n of ctx.npcs) {
+        if (n.estaVivo && n.sprite?.active) targets.push({ id: n.id, kind: 'survivor', x: n.sprite.x, y: n.sprite.y });
+      }
+      for (const d of ctx.dragons) {
+        if (d.id !== this.id && d.isAlly === true && d.estaVivo && d.sprite?.active) {
+          targets.push({ id: d.id, kind: 'dead-dragon', x: d.sprite.x, y: d.sprite.y });
+        }
+      }
+    }
+    let best: (T & { d: number }) | null = null;
+    for (const t of targets) {
+      const d = Math.hypot(t.x - this.sprite.x, t.y - this.sprite.y);
+      if (d <= DRAGON_DETECT_RANGE && (!best || d < best.d)) best = { ...t, d };
+    }
+    if (!best) return false;
+    this.engage(best, best.d);
+    return true;
+  }
+
+  private engage(t: { id: string; kind: 'player' | 'survivor' | 'dead-dragon' | 'ghost'; x: number; y: number }, d: number) {
+    if (!this.sprite) return;
+    if (d > DRAGON_ATTACK_RANGE) {
+      this.moverHacia(t.x, t.y, DRAGON_CHASE_SPEED);
+      return;
+    }
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body | undefined;
+    body?.setVelocity(0);
+    const now = this.sprite.scene.time.now;
+    if (now - this.lastAttackAt < DRAGON_ATTACK_COOLDOWN) return;
+    this.lastAttackAt = now;
+    // Flash de ataque (sin sheet dedicada)
+    this.sprite.setTint(0xffffff);
+    this.sprite.scene.time.delayedCall(150, () => {
+      if (this.sprite && !this.isDead) {
+        if (this.isAlly) this.sprite.clearTint();
+        else this.sprite.setTint(0xff9999);
+      }
+    });
+    reportCombatHit({
+      attackerId: this.id,
+      attackerKind: 'dead-dragon',
+      targetId: t.id,
+      targetKind: t.kind,
+      attackerX: this.sprite.x,
+      attackerY: this.sprite.y,
+      targetX: t.x,
+      targetY: t.y,
+    });
+  }
+
+  private lastAttackAt = 0;
 
   private moverHacia(targetX: number, targetY: number, speed: number) {
     if (!this.sprite) return;

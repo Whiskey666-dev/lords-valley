@@ -102,3 +102,37 @@ export async function trainMySkills(input: {
   const { data } = await api.post<TrainResponseDto>('/player/me/skills/train', input);
   return data;
 }
+
+export interface DevStateDto {
+  godMode: boolean;
+}
+
+export interface SpawnAllowDto {
+  ok: boolean;
+  kind: string;
+  count: number;
+}
+
+export async function fetchMyDev(): Promise<DevStateDto> {
+  const { data } = await api.get<DevStateDto>('/player/me/dev');
+  return data;
+}
+
+export async function setMyGodMode(on: boolean): Promise<DevStateDto> {
+  const { data } = await api.post<DevStateDto>('/player/me/dev/godmode', { on });
+  return data;
+}
+
+export async function grantMyFullMode(): Promise<SkillsStateDto> {
+  const { data } = await api.post<SkillsStateDto>('/player/me/dev/fullmode', {});
+  return data;
+}
+
+/**
+ * Puerta del servidor para comandos create/spawn de la consola.
+ * Todo comando debe validarse aquí (JWT) antes de emitir el evento a Phaser.
+ */
+export async function requestSpawnAllow(kind: string, count: number): Promise<SpawnAllowDto> {
+  const { data } = await api.post<SpawnAllowDto>('/player/me/dev/spawn-allow', { kind, count });
+  return data;
+}

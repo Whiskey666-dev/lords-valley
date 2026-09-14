@@ -36,7 +36,7 @@ Toda la lógica del `DeadDragonPanel`:
 - `handleToggleHabilidad(cat, hab)` → dispatch `phaser-dead-dragon-toggle-habilidad`
 - `handleSetHogar()` → dispatch `phaser-dead-dragon-set-hogar` + actualización optimista
 - `handleEquip(slot)` → dispatch `phaser-dead-dragon-equip/unequip` + actualización optimista de slots
-- `handleDamage()` → dispatch `phaser-dead-dragon-damage {cantidad: 250}`
+- `handleDamage()` → `reportCombatHit` player→dragón (monto 250, servidor acota a 200 y decreta; el panel se sincroniza vía `phaser-dead-dragon-updated`)
 - `handleAddTestItem()` → dispatch `phaser-dead-dragon-add-item` + actualización local
 
 **Efectos**:

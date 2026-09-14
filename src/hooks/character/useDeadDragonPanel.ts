@@ -10,6 +10,7 @@ import {
   type DeadDragonHabilidadCategoria,
 } from "../../characters/DeadDragon";
 import type { DeadDragonPanelData } from "../../ui/character/DeadDragonPanel";
+import { playerEntityId, reportCombatHit } from "../../app/socket";
 
 export function useDeadDragonPanel(
   initialDragon: DeadDragonPanelData,
@@ -224,12 +225,21 @@ export function useDeadDragonPanel(
   );
 
   const handleDamage = useCallback(() => {
-    window.dispatchEvent(
-      new CustomEvent("phaser-dead-dragon-damage" as any, {
-        detail: { id: dragon.id, cantidad: 250 },
-      })
-    );
-  }, [dragon.id]);
+    // Daño validado por el servidor (el player reporta; el servidor acota a 200 y decreta).
+    // Sin respuesta aplicada el panel no cambia: phaser-dead-dragon-updated lo sincroniza.
+    const p = (window as any).__PLAYER_POS__ as { x: number; y: number } | undefined;
+    reportCombatHit({
+      attackerId: playerEntityId(),
+      attackerKind: "player",
+      targetId: dragon.id,
+      targetKind: "dead-dragon",
+      attackerX: p?.x ?? dragon.positionX ?? 0,
+      attackerY: p?.y ?? dragon.positionY ?? 0,
+      targetX: dragon.positionX ?? 0,
+      targetY: dragon.positionY ?? 0,
+      amount: 250,
+    });
+  }, [dragon.id, dragon.positionX, dragon.positionY]);
 
   const handleAddTestItem = useCallback(() => {
     const mock = {

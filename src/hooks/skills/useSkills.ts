@@ -68,10 +68,16 @@ export function useSkills() {
         setLoading(false);
       },
     );
+    // FullMode de la consola muta skills en el servidor: recargar al recibir el evento
+    const onChanged = () => {
+      void refresh();
+    };
+    window.addEventListener("player-skills-changed" as any, onChanged as EventListener);
     return () => {
       cancelled = true;
+      window.removeEventListener("player-skills-changed" as any, onChanged as EventListener);
     };
-  }, []);
+  }, [refresh]);
 
   const skillsByCat = useMemo(() => mergeSkills(remote), [remote]);
 

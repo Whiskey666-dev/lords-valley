@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Survivor } from './Survivor';
 import { ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, isoToTile, isBlockedTile } from '../game/world/Terrain';
-import { reportPlayerAttacked, updateGhostPosition } from '../app/socket';
+import { reportPlayerAttacked, reportCombatHit, playerEntityId, updateGhostPosition } from '../app/socket';
 
 // ─── Constantes del Ghost ────────────────────────────────────────────────────
 export const GHOST_MAX_SALUD = 600;
@@ -325,29 +325,43 @@ export class Ghost {
     });
 
     // SEGURIDAD: El daño ya NO se aplica directamente en el cliente.
-    // En cambio, reportamos el intento de ataque al servidor via WebSocket.
-    // El servidor valida (modo creativo, distancia, cooldown) y decide si aplicar el daño.
-    // El cliente aplica el daño SOLO cuando recibe 'player:damage_result' con applied=true.
+    // Se reporta al servidor via WebSocket (player:attacked o combat:hit) y el
+    // servidor valida (modo creativo/godmode, distancia, cooldown) y decreta daño y muerte.
+    // El cliente aplica el daño SOLO al recibir la confirmación del servidor.
     if (targetEntity && this.sprite) {
       const isPlayer = targetEntity.constructor?.name === "Player" || targetEntity === (window as any).__PLAYER_REF__;
-      const targetId: string = isPlayer
-        ? ((window as any).__PLAYER_ID__ ?? 'player')
-        : (targetEntity.id ?? 'unknown');
+      const tx = targetEntity.sprite?.x ?? targetEntity.x ?? 0;
+      const ty = targetEntity.sprite?.y ?? targetEntity.y ?? 0;
 
       const settlementId: string = this.settlementId ?? ((window as any).__SETTLEMENT_ID__ ?? '');
 
-      reportPlayerAttacked({
-        ghostId: this.id,
-        targetId,
-        ghostX: this.sprite.x,
-        ghostY: this.sprite.y,
-        targetX: targetEntity.x ?? 0,
-        targetY: targetEntity.y ?? 0,
-        settlementId,
-      });
-
-      // El daño se aplicará en el listener de 'player:damage_result' en MainScene
-      (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, time: now, ghostId: this.id, pendingServerConfirmation: true };
+      if (isPlayer) {
+        const targetId: string = playerEntityId();
+        reportPlayerAttacked({
+          ghostId: this.id,
+          targetId,
+          ghostX: this.sprite.x,
+          ghostY: this.sprite.y,
+          targetX: tx,
+          targetY: ty,
+          settlementId,
+        });
+        // El daño se aplicará en el listener de 'player:damage_result' en MainScene
+        (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: true, time: now, ghostId: this.id, pendingServerConfirmation: true };
+      } else {
+        // Superviviente u otro NPC: golpe genérico validado (daño base ghost 50 en servidor)
+        reportCombatHit({
+          attackerId: this.id,
+          attackerKind: 'ghost',
+          targetId: targetEntity.id ?? 'unknown',
+          targetKind: 'survivor',
+          attackerX: this.sprite.x,
+          attackerY: this.sprite.y,
+          targetX: tx,
+          targetY: ty,
+        });
+        (window as any).__PLAYER_WAS_ATTACKED__ = { attacked: false, time: now, ghostId: this.id, pendingServerConfirmation: true };
+      }
     }
   }
 
@@ -402,6 +416,22 @@ export class Ghost {
   }
 
   // ── Daño / Muerte ─────────────────────────────────────────────────────────
+
+  /**
+   * Aplica daño confirmado por el servidor (hp autoritativo).
+   * El cliente nunca calcula HP: lo sincroniza y muestra muerte si llega a 0.
+   */
+  applyServerDamage(hp: number) {
+    if (this.isDead) return;
+    this.salud = Math.max(0, Math.min(this.maxSalud, hp));
+    if (this.sprite?.active) {
+      this.sprite.setTint(0xffffff);
+      this.sprite.scene.time.delayedCall(120, () => {
+        if (this.sprite?.active && !this.isDead) this.sprite.setTint(0xaaddff);
+      });
+    }
+    if (this.salud <= 0) this.morir();
+  }
 
   recibirDano(cantidad: number): boolean {
     if (this.isDead) return false;

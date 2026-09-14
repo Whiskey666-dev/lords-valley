@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { isRebindingActive, setConsoleOpen } from "../../ui/input/KeyBindings";
 import { addItemRemote } from "../inventory/playerInventoryStore";
+import {
+  apiMessage,
+  fetchMyDev,
+  grantMyFullMode,
+  requestSpawnAllow,
+  setMyGodMode,
+} from "../../app/api/player.api";
 
 export function useConsole() {
   const [open, setOpen] = useState(false);
@@ -8,6 +15,8 @@ export function useConsole() {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [godMode, setGodMode] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-focus al abrir y bloqueo de input de juego
@@ -45,6 +54,11 @@ export function useConsole() {
       if (open) {
         if (e.key === "Escape") {
           e.preventDefault();
+          // Si el menú de comandos está abierto, Escape lo cierra primero
+          if (menuOpen) {
+            setMenuOpen(false);
+            return;
+          }
           closeConsole();
         }
         return;
@@ -60,7 +74,7 @@ export function useConsole() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  }, [open, menuOpen]);
 
   // Escucha feedback de spawn de NPCs para mostrar en consola
   useEffect(() => {
@@ -96,7 +110,20 @@ export function useConsole() {
   const closeConsole = () => {
     setConsoleOpen(false);
     setOpen(false);
+    setMenuOpen(false);
     setInput("");
+  };
+
+  const closeMenu = () => setMenuOpen(false);
+
+  const openMenu = () => {
+    setMenuOpen(true);
+    setInput("");
+    // Estado GodMode autoritativo para mostrarlo en el panel
+    void fetchMyDev().then(
+      (dev) => setGodMode(dev.godMode),
+      () => setGodMode(null),
+    );
   };
 
   const switchMode = (newMode: "chat" | "console") => {
@@ -117,7 +144,12 @@ export function useConsole() {
       if (
         l.startsWith("createnpc") ||
         l.startsWith("createdeaddragon") ||
+        l.startsWith("spawndeaddragon") ||
         l.startsWith("createghost") ||
+        l.startsWith("spawnghost") ||
+        l.startsWith("godmode") ||
+        l.startsWith("fullmode") ||
+        l.startsWith("menu") ||
         l.startsWith("creative") ||
         l.startsWith("survival")
       ) {
@@ -133,40 +165,71 @@ export function useConsole() {
       return;
     }
 
-    // Modo Consola
+    // Modo Consola — convención: aliados con "create", enemigos con "spawn".
+    // Todo create/spawn se valida en el servidor (POST /player/me/dev/spawn-allow, JWT)
+    // antes de emitir el evento a Phaser.
     const lower = trimmed.toLowerCase();
+
+    const runGatedSpawn = (
+      kind: string,
+      count: number,
+      event: string,
+      detail: Record<string, unknown>,
+      label: string,
+    ) => {
+      setFeedback("⏳ Validando en el servidor…");
+      void requestSpawnAllow(kind, count).then(
+        () => {
+          window.dispatchEvent(new CustomEvent(event as any, { detail }));
+          setFeedback(label);
+          setHistory(h => [...h.slice(-8), `✓ ${label}`]);
+          setInput("");
+          setTimeout(() => setFeedback(null), 2500);
+        },
+        (e) => {
+          setFeedback(apiMessage(e));
+          setTimeout(() => setFeedback(null), 3500);
+        },
+      );
+    };
+
     const match = lower.match(/^createnpc\s*([1-9]|10)$/);
     if (match) {
       const count = parseInt(match[1], 10);
-      window.dispatchEvent(new CustomEvent("phaser-create-npcs", { detail: { count } }));
-      setFeedback(`Creando ${count} NPC(s) con habilidades/personalidad/rasgos/gustos aleatorios...`);
-      setHistory(h => [...h.slice(-8), `✓ ${count} NPCs creados`]);
-      setInput("");
-      setTimeout(() => setFeedback(null), 2500);
+      runGatedSpawn("npc", count, "phaser-create-npcs", { count }, `Creando ${count} NPC(s) aliado(s)...`);
       return;
     }
-    // — Comandos Dead Dragon: createDeadDragonA1..5 (Aliado) / createDeadDragonE1..5 (Enemigo)
-    const ddMatch = lower.match(/^createdeaddragon\s*([ae])\s*([1-5])$/);
-    if (ddMatch) {
-      const isAlly = ddMatch[1] === "a";
-      const count = parseInt(ddMatch[2], 10);
-      window.dispatchEvent(new CustomEvent("phaser-create-dead-dragons" as any, { detail: { count, isAlly } }));
-      const fac = isAlly ? "aliados" : "enemigos";
-      setFeedback(`Creando ${count} Dead Dragon ${fac}...`);
-      setHistory(h => [...h.slice(-8), `✓ ${count} Dead Dragon ${fac}`]);
-      setInput("");
-      setTimeout(() => setFeedback(null), 2500);
+    // — Dead Dragon aliado: createDeadDragon1..5 (sin tipo A/E) —
+    const ddAllyMatch = lower.match(/^createdeaddragon\s*([1-5])$/);
+    if (ddAllyMatch) {
+      const count = parseInt(ddAllyMatch[1], 10);
+      runGatedSpawn("dead-dragon-ally", count, "phaser-create-dead-dragons", { count, isAlly: true }, `Creando ${count} Dead Dragon aliado(s)...`);
       return;
     }
-    // — Comandos Ghost: createGhost1..3 / createGhost 1..3 / createGhost
-    const ghostMatch = lower.match(/^createghost\s*([1-3])?$/);
+    // — Dead Dragon enemigo: spawnDeadDragon1..5 —
+    const ddEnemyMatch = lower.match(/^spawndeaddragon\s*([1-5])$/);
+    if (ddEnemyMatch) {
+      const count = parseInt(ddEnemyMatch[1], 10);
+      runGatedSpawn("dead-dragon-enemy", count, "phaser-create-dead-dragons", { count, isAlly: false }, `Invocando ${count} Dead Dragon enemigo(s)...`);
+      return;
+    }
+    // Formato antiguo con A/E: ya no existe, redirigir al nuevo
+    if (/^createdeaddragon\s*[ae]\s*[1-5]$/.test(lower)) {
+      setFeedback("createDeadDragon<A/E> ya no existe: usa createDeadDragon<N> (aliado) o spawnDeadDragon<N> (enemigo). Ej: createDeadDragon3");
+      setTimeout(() => setFeedback(null), 4000);
+      return;
+    }
+    // — Ghost enemigo: spawnGhost1..3 / spawnGhost 1..3 / spawnGhost —
+    const ghostMatch = lower.match(/^spawnghost\s*([1-3])?$/);
     if (ghostMatch) {
       const count = ghostMatch[1] ? parseInt(ghostMatch[1], 10) : 1;
-      window.dispatchEvent(new CustomEvent("phaser-create-ghosts" as any, { detail: { count } }));
-      setFeedback(`Creando ${count} Ghost(s) enemigo(s)...`);
-      setHistory(h => [...h.slice(-8), `✓ ${count} Ghost(s) creados`]);
-      setInput("");
-      setTimeout(() => setFeedback(null), 2500);
+      runGatedSpawn("ghost", count, "phaser-create-ghosts", { count }, `Invocando ${count} Ghost(s) enemigo(s)...`);
+      return;
+    }
+    // Formato antiguo createGhost: redirigir al nuevo
+    if (/^createghost(\s*[1-3])?$/.test(lower)) {
+      setFeedback("createGhost ya no existe: los enemigos se invocan con spawn. Usa spawnGhost1..3");
+      setTimeout(() => setFeedback(null), 4000);
       return;
     }
     // — Modo Creativo / Modo Supervivencia —
@@ -245,8 +308,70 @@ export function useConsole() {
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
+    if (lower === "menu") {
+      openMenu();
+      setFeedback("📜 Panel de comandos abierto (Npc · Mobs · Items · Dev)");
+      setHistory(h => [...h.slice(-8), "✓ menu abierto"]);
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+    // — Dev: GodModeOn / GodModeOff (validados por el servidor) —
+    if (lower === "godmodeon") {
+      setFeedback("⏳ Validando en el servidor…");
+      void setMyGodMode(true).then(
+        (dev) => {
+          setGodMode(dev.godMode);
+          window.dispatchEvent(new CustomEvent("phaser-godmode" as any, { detail: { on: true } }));
+          setFeedback("🛡️ GodMode activado: inmune al daño, hambre y sed (100%).");
+          setHistory(h => [...h.slice(-8), "✓ GodMode ON"]);
+          setInput("");
+          setTimeout(() => setFeedback(null), 3000);
+        },
+        (e) => {
+          setFeedback(apiMessage(e));
+          setTimeout(() => setFeedback(null), 3500);
+        },
+      );
+      return;
+    }
+    if (lower === "godmodeoff") {
+      setFeedback("⏳ Validando en el servidor…");
+      void setMyGodMode(false).then(
+        (dev) => {
+          setGodMode(dev.godMode);
+          window.dispatchEvent(new CustomEvent("phaser-godmode" as any, { detail: { on: false } }));
+          setFeedback("GodMode desactivado.");
+          setHistory(h => [...h.slice(-8), "✓ GodMode OFF"]);
+          setInput("");
+          setTimeout(() => setFeedback(null), 3000);
+        },
+        (e) => {
+          setFeedback(apiMessage(e));
+          setTimeout(() => setFeedback(null), 3500);
+        },
+      );
+      return;
+    }
+    // — Dev: FullMode (nivel máximo en las 48 habilidades, servidor) —
+    if (lower === "fullmode") {
+      setFeedback("⏳ Validando en el servidor…");
+      void grantMyFullMode().then(
+        () => {
+          window.dispatchEvent(new CustomEvent("player-skills-changed" as any));
+          setFeedback("⭐ FullMode: las 48 habilidades al nivel máximo.");
+          setHistory(h => [...h.slice(-8), "✓ FullMode aplicado"]);
+          setInput("");
+          setTimeout(() => setFeedback(null), 3000);
+        },
+        (e) => {
+          setFeedback(apiMessage(e));
+          setTimeout(() => setFeedback(null), 3500);
+        },
+      );
+      return;
+    }
     if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | createDeadDragonA1..5/E1..5 | createGhost1..3 | CreativeMode | SurvivalMode | fog toggle/on/off | fog radius <32-2000> | addItem:<Item><1-9> (ej: addItem:Madera5) | addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5) | help");
+      setFeedback("Comandos: createNpc1..10 | createDeadDragon1..5 (aliado) | spawnDeadDragon1..5 | spawnGhost1..3 | menu | addItem:<Item><1-9> (ej: addItem:Madera5) | addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5) | GodModeOn/Off | FullMode | CreativeMode | SurvivalMode | fog toggle/on/off | help");
       return;
     }
     // — Añadir items al inventario (validado por el backend con JWT) —
@@ -320,7 +445,12 @@ export function useConsole() {
     if (
       !lower.startsWith("createnpc") &&
       !lower.startsWith("createdeaddragon") &&
+      !lower.startsWith("spawndeaddragon") &&
       !lower.startsWith("createghost") &&
+      !lower.startsWith("spawnghost") &&
+      !lower.startsWith("godmode") &&
+      !lower.startsWith("fullmode") &&
+      !lower.startsWith("menu") &&
       !lower.startsWith("creative") &&
       !lower.startsWith("survival") &&
       !lower.startsWith("fog") &&
@@ -331,7 +461,7 @@ export function useConsole() {
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
-    setFeedback(`Comando no reconocido: ${trimmed} (usa createGhost1..3 | CreativeMode | SurvivalMode | help)`);
+    setFeedback(`Comando no reconocido: ${trimmed} (usa menu | spawnGhost1..3 | CreativeMode | SurvivalMode | help)`);
     setTimeout(() => setFeedback(null), 2500);
   };
 
@@ -348,6 +478,10 @@ export function useConsole() {
     inputRef,
     execute,
     closeConsole,
+    menuOpen,
+    openMenu,
+    closeMenu,
+    godMode,
   };
 }
 

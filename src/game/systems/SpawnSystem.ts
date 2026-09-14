@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { Survivor } from "../../characters/Survivor";
 import { DeadDragon } from "../../characters/DeadDragon";
 import { Ghost } from "../../characters/Ghost";
-import { isBlockedTile, findNearestSafeWorldPos, isBlockedIsoWorldXY, isoToTile, tileToIso, TILE, WORLD_SIZE, ISO_TILE_H } from "../world/Terrain";
+import { isBlockedTile, findNearestSafeWorldPos, findNearestSafeIsoPos, isBlockedIsoWorldXY, isoToTile, tileToIso, TILE, WORLD_SIZE, WORLD_TILES, ISO_TILE_H, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT } from "../world/Terrain";
 import { spawnSurvivors as apiSpawnSurvivors } from "../../app/api/settlement.api";
 import { requestGhostSpawn, joinCombatRoom } from "../../app/socket";
 
@@ -88,6 +88,34 @@ export function findSafeSpawnPos(
 }
 
 /**
+ * Punto aleatorio SEGURO en cualquier parte del mapa iso (coords iso 0..12288 x 0..6144).
+ * Se usa como base sugerida para el spawn de Ghosts: el servidor dispersa
+ * alrededor y sigue siendo la autoridad de la posición final.
+ */
+export function getRandomMapSpawn(): { x: number; y: number } {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const tx = 8 + Math.floor(Math.random() * (WORLD_TILES - 16));
+    const ty = 8 + Math.floor(Math.random() * (WORLD_TILES - 16));
+    const p = tileToIso(tx, ty);
+    const y = p.y + ISO_TILE_H / 2;
+    if (!isBlockedIsoWorldXY(p.x, y)) return { x: Math.round(p.x), y: Math.round(y) };
+    const safe = findNearestSafeIsoPos(p.x, y, 12);
+    if (safe) return { x: Math.round(safe.x), y: Math.round(safe.y) };
+  }
+  const c = tileToIso(96, 96);
+  return { x: Math.round(c.x), y: Math.round(c.y + ISO_TILE_H / 2) };
+}
+
+/**
+ * Acota un punto a los límites del mundo iso.
+ */
+export function clampToIsoWorld(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.max(0, Math.min(ISO_WORLD_WIDTH, Math.round(x))),
+    y: Math.max(0, Math.min(ISO_WORLD_HEIGHT, Math.round(y))),
+  };
+}
+/**
  * Spawna NPCs con datos autoritativos del servidor.
  * El backend genera IDs UUID reales, stats y needs — no Math.random() en el cliente.
  *
@@ -106,30 +134,32 @@ export async function spawnNpcs(
 ): Promise<void> {
   const clamped = Phaser.Math.Clamp(count, 1, 10);
 
-  // ESTRATEGIA PRINCIPAL: datos del servidor
+  // ESTRATEGIA PRINCIPAL: datos del servidor (IDs UUID reales, stats canónicos)
   if (settlementId) {
     try {
-      const updatedSettlement = await apiSpawnSurvivors(settlementId, clamped);
-      const newSurvivors = updatedSettlement.survivors.slice(-clamped); // los últimos N son los recién creados
-
-      for (const serverData of newSurvivors) {
-        const surv = Survivor.fromServerData(serverData);
-        const otherSprites = npcs.map(n => n.sprite).filter(Boolean) as (Phaser.GameObjects.GameObject & { x: number; y: number })[];
-
-        // Usar posición del servidor si existe y es válida, si no, calcular posición segura
-        let spawnPos: { x: number; y: number };
-        if (typeof serverData.positionX === 'number' && serverData.positionX !== 0) {
-          spawnPos = { x: serverData.positionX, y: serverData.positionY ?? serverData.positionX };
-        } else {
-          spawnPos = findSafeSpawnPos(player, 80, 220, otherSprites, 50);
+      // El endpoint acota a 5 por llamada: trocear + detectar por id (nunca slice(-N),
+      // que duplicaría preexistentes si el settlement ya tenía survivors).
+      const knownIds = new Set(npcs.map(n => n.id));
+      let created = 0;
+      for (let pending = clamped; pending > 0; pending -= 5) {
+        const updatedSettlement = await apiSpawnSurvivors(settlementId, Math.min(pending, 5));
+        const fresh = (updatedSettlement.survivors ?? []).filter(s => s?.id && !knownIds.has(s.id));
+        for (const serverData of fresh) {
+          knownIds.add(serverData.id);
+          const surv = Survivor.fromServerData(serverData);
+          const otherSprites = npcs.map(n => n.sprite).filter(Boolean) as (Phaser.GameObjects.GameObject & { x: number; y: number })[];
+          // Render SIEMPRE en coords iso del cliente: la positionX del servidor vive
+          // en espacio tile (3072±150) y pintarla directo caería en la zona oeste.
+          // La última posición iso real persiste en el guardado local (SaveSystem).
+          const spawnPos = findSafeSpawnPos(player, 80, 220, otherSprites, 50);
+          surv.instanciarSprite(scene, spawnPos.x, spawnPos.y);
+          npcs.push(surv);
+          created++;
+          console.log(`[SpawnSystem] NPC ${surv.nombre} (${surv.profesion}) [server-id: ${surv.id}] generado en ${spawnPos.x.toFixed(0)},${spawnPos.y.toFixed(0)}`);
         }
-
-        surv.instanciarSprite(scene, spawnPos.x, spawnPos.y);
-        npcs.push(surv);
-        console.log(`[SpawnSystem] NPC ${surv.nombre} (${surv.profesion}) [server-id: ${surv.id}] generado en ${spawnPos.x.toFixed(0)},${spawnPos.y.toFixed(0)}`);
       }
 
-      window.dispatchEvent(new CustomEvent("phaser-npcs-spawned", { detail: { count: newSurvivors.length, total: npcs.length } }));
+      window.dispatchEvent(new CustomEvent("phaser-npcs-spawned", { detail: { count: created, total: npcs.length } }));
       return;
     } catch (err) {
       console.warn('[SpawnSystem] Servidor no disponible para spawn de NPCs, usando fallback local temporal:', err);
@@ -181,8 +211,10 @@ export function spawnDeadDragons(
  * El servidor genera IDs UUID reales y los broadcast al settlement room.
  *
  * Flujo:
- *   1. Emite 'ghost:spawn_request' al servidor via /combat socket
- *   2. El servidor genera ghosts con stats canónicos y emite 'ghost:spawned'
+ *   1. Emite 'ghost:spawn_request' al servidor via /combat socket (UNO por ghost,
+ *      cada uno con su propia base aleatoria en cualquier parte del mapa iso)
+ *   2. El servidor genera ghosts con stats canónicos, dispersa alrededor de la
+ *      base y emite 'ghost:spawned' (sigue siendo la autoridad de la posición)
  *   3. El listener de 'ghost:spawned' en MainScene crea los sprites Phaser
  *
  * Si no hay settlementId, fallback a generación local (con advertencia).
@@ -194,8 +226,13 @@ export function requestServerGhostSpawn(
   const clamped = Phaser.Math.Clamp(count, 1, 3);
 
   if (settlementId) {
-    requestGhostSpawn(settlementId, clamped);
-    console.log(`[SpawnSystem] Ghost spawn solicitado al servidor: ${clamped} ghosts para settlement ${settlementId}`);
+    // Un request por ghost: cada uno aparece en un punto aleatorio DISTINTO
+    // del mapa en lugar de agruparse alrededor de una única base.
+    for (let i = 0; i < clamped; i++) {
+      const base = getRandomMapSpawn();
+      requestGhostSpawn(settlementId, 1, base);
+    }
+    console.log(`[SpawnSystem] ${clamped} ghost(s) solicitados al servidor (bases aleatorias) para settlement ${settlementId}`);
   } else {
     // Fallback sin settlementId — genera localmente con advertencia
     console.warn('[SpawnSystem] ⚠️ requestServerGhostSpawn sin settlementId — los ghosts no estarán registrados en el servidor');
@@ -219,18 +256,15 @@ export function initCombatSocket(settlementId: string): void {
 export function spawnGhosts(
   scene: Phaser.Scene,
   count: number,
-  player: Phaser.GameObjects.GameObject & { x: number; y: number },
+  _player: Phaser.GameObjects.GameObject & { x: number; y: number },
   ghosts: Ghost[],
-  existingNpcs: Survivor[] = []
+  _existingNpcs: Survivor[] = []
 ): void {
   console.warn('[SpawnSystem] ⚠️ spawnGhosts() LOCAL — los datos no son autoritativos. Usar requestServerGhostSpawn() con settlementId.');
   const clamped = Phaser.Math.Clamp(count, 1, 3);
   for (let i = 0; i < clamped; i++) {
-    const otherSprites = [
-      ...ghosts.map(g => g.sprite),
-      ...existingNpcs.map(n => n.sprite),
-    ].filter(Boolean) as (Phaser.GameObjects.GameObject & { x: number; y: number })[];
-    const spawn = findSafeSpawnPos(player, 100, 260, otherSprites, 50);
+    // Igual que el servidor: punto aleatorio en cualquier parte del mapa (no junto al jugador)
+    const spawn = getRandomMapSpawn();
 
     const ghost = new Ghost();
     ghost.instanciarSprite(scene, spawn.x, spawn.y);

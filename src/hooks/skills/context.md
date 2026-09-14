@@ -7,6 +7,7 @@
 - Carga del servidor (`loading`/`error`/`refresh` con reintento)
 - `skillsByCat`: mezcla `SKILL_DEFS` (display) + estado remoto (level/xp/tier/unlocked)
 - `trainSchool(cat)` / `trainSkill(cat, skillId)`: piden +10 XP al servidor (consume 1 pergamino allí) y actualizan caché de inventario con la respuesta
+- Escucha `player-skills-changed`: recarga desde el servidor tras `FullMode` de la consola
 - `selectedCategory`, `categoryProgress`, `globalProgress`
 - 6 escuelas en pentagrama SVG: 5 vértices + núcleo de Artes Místicas
 - Cierra con Escape

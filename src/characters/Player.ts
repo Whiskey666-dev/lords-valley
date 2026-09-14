@@ -9,7 +9,13 @@ import { isoToTile } from "../game/world/Terrain";
 import { getHeightFast, HEIGHT_STEP_PX } from "../game/world/TerrainHeight";
 import { canStepHeight } from "../game/world/IsoWalls";
 
+/** HP canónico del jugador, sincronizado con el servidor (COMBAT_STATS.player). */
+export const PLAYER_MAX_SALUD = 200;
+
 export class Player extends BaseHuman {
+  public salud: number = PLAYER_MAX_SALUD;
+  public maxSalud: number = PLAYER_MAX_SALUD;
+  private isDead = false;
   private isJumping = false;
   private isDashing = false;
   /** Píxeles que sube la textura sobre el plano físico (sigue el relieve). */
@@ -186,8 +192,13 @@ export class Player extends BaseHuman {
   }
 
   updateEntity() {
-    this.updateTerrainHeight();
     const body = this.body as Phaser.Physics.Arcade.Body;
+    // Muerto: quieto hasta el respawn (MainScene lo reaparece)
+    if (this.isDead) {
+      body.setVelocity(0);
+      return;
+    }
+    this.updateTerrainHeight();
     if (isGameInputBlocked()) {
       body.setVelocity(0);
       if (!this.isDashing && !CombatSystem.isAttacking(this) && !this.isJumping) {
@@ -276,6 +287,61 @@ export class Player extends BaseHuman {
     } else {
       this.playIdle();
     }
+  }
+
+  get estaVivo(): boolean {
+    return !this.isDead && this.salud > 0;
+  }
+
+  /**
+   * Daño confirmado por el servidor (MainScene sincroniza el HP autoritativo
+   * con applyServerDamage; este método es el fallback local). Retorna true si muere.
+   */
+  recibirDano(cantidad: number): boolean {
+    if (this.isDead) return true;
+    this.salud = Math.max(0, this.salud - cantidad);
+    this.setTint(0xff6666);
+    this.scene.time.delayedCall(150, () => {
+      if (this.active && !this.isDead) this.clearTint();
+    });
+    if (this.salud <= 0) {
+      this.morir();
+      return true;
+    }
+    return false;
+  }
+
+  /** Sincroniza el HP autoritativo del servidor. */
+  applyServerDamage(hp: number, maxHp: number) {
+    if (this.isDead) return;
+    this.maxSalud = Math.max(1, maxHp);
+    this.salud = Math.max(0, Math.min(this.maxSalud, hp));
+    this.setTint(0xff6666);
+    this.scene.time.delayedCall(150, () => {
+      if (this.active && !this.isDead) this.clearTint();
+    });
+    if (this.salud <= 0) this.morir();
+  }
+
+  /** Muerte real con la animación de muerte del sprite compartido. */
+  morir() {
+    if (this.isDead) return;
+    this.isDead = true;
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    body?.setVelocity(0);
+    console.log("[player] ha muerto — respawn en el punto inicial...");
+    this.die();
+  }
+
+  /** Reaparece en el punto inicial con la vida llena. */
+  respawn(x: number, y: number) {
+    this.isDead = false;
+    this.salud = this.maxSalud;
+    this.setPosition(x, y);
+    this.clearTint();
+    this.setAlpha(1);
+    this.playIdle();
+    console.log(`[player] respawn en ${x.toFixed(0)},${y.toFixed(0)} con ${this.salud}/${this.maxSalud}`);
   }
 }
 
