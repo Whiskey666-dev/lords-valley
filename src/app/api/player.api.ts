@@ -53,6 +53,15 @@ export interface TrainResponseDto {
   inventory: InventoryStackDto[];
   skills: SkillsStateDto;
   xp: number;
+  needs?: PlayerNeedsDto;
+  escuela?: SchoolId | null;
+  effect?: string;
+}
+
+export interface PlayerNeedsDto {
+  hunger: number;
+  thirst: number;
+  updatedAt: number;
 }
 
 export function apiMessage(err: unknown): string {
@@ -82,6 +91,11 @@ export async function addMyItem(input: {
 
 export async function applyItemUse(stackId: string): Promise<TrainResponseDto & { escuela: SchoolId | null }> {
   const { data } = await api.post('/player/me/inventory/use', { stackId });
+  return data;
+}
+
+export async function fetchMyNeeds(): Promise<PlayerNeedsDto> {
+  const { data } = await api.get<PlayerNeedsDto>('/player/me/needs');
   return data;
 }
 

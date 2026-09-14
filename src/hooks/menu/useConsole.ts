@@ -371,16 +371,18 @@ export function useConsole() {
       return;
     }
     if (lower === "help" || lower === "ayuda") {
-      setFeedback("Comandos: createNpc1..10 | createDeadDragon1..5 (aliado) | spawnDeadDragon1..5 | spawnGhost1..3 | menu | addItem:<Item><1-9> (ej: addItem:Madera5) | addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5) | GodModeOn/Off | FullMode | CreativeMode | SurvivalMode | fog toggle/on/off | help");
+      setFeedback("Comandos: createNpc1..10 | createDeadDragon1..5 (aliado) | spawnDeadDragon1..5 | spawnGhost1..3 | menu | addItem:<Item><1-9> (ej: addItem:Madera5) | addItem:Comida/Pan<1-9> | addItem:Bebida/OdreAgua<1-9> | addItem:Bebida/OdreVacio<1-9> | addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5) | GodModeOn/Off | FullMode | CreativeMode | SurvivalMode | fog toggle/on/off | help");
       return;
     }
     // — Añadir items al inventario (validado por el backend con JWT) —
     // addItem:Pergamino/<Escuela><1-9> (ej: addItem:Pergamino/Survival5)
-    // addItem:<Item del catálogo><1-9> (ej: addItem:Madera5, addItem:Pan3)
+    // addItem:Comida/<Item><1-9> (ej: addItem:Comida/Pan5)
+    // addItem:Bebida/<Item><1-9> (ej: addItem:Bebida/OdreAgua3, addItem:Bebida/OdreVacio2)
+    // addItem:<Item del catálogo><1-9> (ej: addItem:Madera5, addItem:Comida/Pan3)
     if (lower.startsWith("additem")) {
       const restMatch = trimmed.match(/^additem\s*:\s*(.+?)\s*$/i);
       if (!restMatch) {
-        setFeedback("Uso: addItem:<Item><1-9> · Ej: addItem:Madera5 · Pergaminos: addItem:Pergamino/Survival5");
+        setFeedback("Uso: addItem:<Item><1-9> · Ej: addItem:Madera5 · Comida: addItem:Comida/Pan5 · Bebida: addItem:Bebida/OdreAgua3 · Pergaminos: addItem:Pergamino/Survival5");
         setTimeout(() => setFeedback(null), 3000);
         return;
       }
@@ -388,36 +390,63 @@ export function useConsole() {
       if (rest.includes("/")) {
         const parts = rest.split("/");
         if (parts.length !== 2) {
-          setFeedback("Uso: addItem:Pergamino/<Escuela><1-9> · Ej: addItem:Pergamino/Survival5");
+          setFeedback("Uso: addItem:Pergamino/<Escuela><1-9> · addItem:Comida/Pan<1-9> · addItem:Bebida/OdreAgua<1-9> · Ej: addItem:Comida/Pan5");
           setTimeout(() => setFeedback(null), 3000);
           return;
         }
         const itemPart = parts[0].trim().toLowerCase();
-        const schoolQtyPart = parts[1].trim();
+        const secondPart = parts[1].trim();
         const isPergamino = itemPart === "pergamino" || itemPart === "pergaminos" || itemPart === "scroll";
-        if (!isPergamino) {
-          setFeedback(`Item "${parts[0].trim()}" no soportado con /. Usa: addItem:Pergamino/<Escuela><1-9> o addItem:<Item><1-9> (ej: addItem:Madera5)`);
-          setTimeout(() => setFeedback(null), 3500);
-          return;
-        }
-        const qtyMatch = schoolQtyPart.match(/^(.+?)\s*([1-9])$/);
-        if (!qtyMatch) {
-          setFeedback("La cantidad debe ser un número del 1 al 9 al final. Ej: addItem:Pergamino/Survival5");
-          setTimeout(() => setFeedback(null), 3000);
-          return;
-        }
-        const payload = { escuela: qtyMatch[1].trim(), cantidad: parseInt(qtyMatch[2], 10) };
-        setFeedback("⏳ Validando en el servidor…");
-        void addItemRemote(payload).then((res) => {
-          if (res.ok) {
-            setFeedback(`📜 +${payload.cantidad} pergamino de ${payload.escuela} añadido (validado). Abre Habilidades para Entrenar.`);
-            setHistory(h => [...h.slice(-8), `✓ ${payload.cantidad}x pergamino ${payload.escuela}`]);
-            setInput("");
-          } else {
-            setFeedback(res.message);
+        if (isPergamino) {
+          const qtyMatch = secondPart.match(/^(.+?)\s*([1-9])$/);
+          if (!qtyMatch) {
+            setFeedback("La cantidad debe ser un número del 1 al 9 al final. Ej: addItem:Pergamino/Survival5");
+            setTimeout(() => setFeedback(null), 3000);
+            return;
           }
-          setTimeout(() => setFeedback(null), 3500);
-        });
+          const payload = { escuela: qtyMatch[1].trim(), cantidad: parseInt(qtyMatch[2], 10) };
+          setFeedback("⏳ Validando en el servidor…");
+          void addItemRemote(payload).then((res) => {
+            if (res.ok) {
+              setFeedback(`📜 +${payload.cantidad} pergamino de ${payload.escuela} añadido (validado). Abre Habilidades para Entrenar.`);
+              setHistory(h => [...h.slice(-8), `✓ ${payload.cantidad}x pergamino ${payload.escuela}`]);
+              setInput("");
+            } else {
+              setFeedback(res.message);
+            }
+            setTimeout(() => setFeedback(null), 3500);
+          });
+          return;
+        }
+        // Comida / Bebida: el backend resuelve el nombre (alias OdreAgua -> Odre con Agua).
+        // Acepta: comida, comida y bebida, food | bebida, bebidas, drink
+        const isComida = itemPart === "comida" || itemPart === "comidas" || itemPart === "comidaybebida" || itemPart === "comida y bebida" || itemPart === "food";
+        const isBebida = itemPart === "bebida" || itemPart === "bebidas" || itemPart === "drink" || itemPart === "drinks";
+        if (isComida || isBebida) {
+          const qtyMatch = secondPart.match(/^(.+?)\s*([1-9])?$/);
+          const rawName = (qtyMatch?.[1] ?? secondPart).trim();
+          const qty = qtyMatch?.[2] ? parseInt(qtyMatch[2], 10) : 1;
+          if (!rawName) {
+            setFeedback(isComida ? "Uso: addItem:Comida/Pan<1-9> · Ej: addItem:Comida/Pan5" : "Uso: addItem:Bebida/OdreAgua<1-9> · Ej: addItem:Bebida/OdreAgua3");
+            setTimeout(() => setFeedback(null), 3000);
+            return;
+          }
+          const label = isComida ? "🍞" : "💧";
+          setFeedback("⏳ Validando en el servidor…");
+          void addItemRemote({ nombre: rawName, cantidad: qty }).then((res) => {
+            if (res.ok) {
+              setFeedback(`${label} +${qty} ${rawName} añadido (validado). Úsalo desde el Inventario (I): Pan +20% hambre, Odre con Agua +20% sed.`);
+              setHistory(h => [...h.slice(-8), `✓ ${qty}x ${rawName}`]);
+              setInput("");
+            } else {
+              setFeedback(res.message);
+            }
+            setTimeout(() => setFeedback(null), 3500);
+          });
+          return;
+        }
+        setFeedback(`Item "${parts[0].trim()}" no soportado con /. Usa: addItem:Pergamino/<Escuela><1-9> · addItem:Comida/Pan<1-9> · addItem:Bebida/OdreAgua<1-9> · o addItem:<Item><1-9> (ej: addItem:Madera5)`);
+        setTimeout(() => setFeedback(null), 3500);
         return;
       }
       const qtyMatch = rest.match(/^(.+?)\s*([1-9])?$/);

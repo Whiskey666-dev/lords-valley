@@ -12,10 +12,13 @@ export function NpcStatusTab({ npc, isCore }: Props) {
         <>
           <div><b>Username:</b> {npc.username}</div>
           <div><b>ID:</b> {npc.id?.slice(0, 8)}</div>
+          <div style={{ marginTop: 6, background: '#111', padding: 6, borderRadius: 6 }}>
+            🍖 Saciedad: {100 - toPct(npc.needs?.hunger)}% • 💧 Hidratación: {100 - toPct(npc.needs?.thirst)}%
+          </div>
         </>
       ) : isCore ? (
         <>
-          <div><b>Seguridad:</b> {npc.needs?.safety ?? 0}%</div>
+          <div><b>Seguridad:</b> {Math.max(0, Math.min(100, Math.round(npc.needs?.safety ?? 0)))}%</div>
           <div>
             <b>SocialLinks:</b> {npc.socialLinks?.length ?? 0}{" "}
             {npc.socialLinks?.map(s => `${s.type}→${s.targetSurvivorId.slice(0, 4)}(${s.affinity})`).join(', ')}
@@ -34,4 +37,10 @@ export function NpcStatusTab({ npc, isCore }: Props) {
       )}
     </div>
   );
+}
+
+/** Porcentaje entero 0-100 sin decimales (backend: 0 = saciado, 100 = hambriento). */
+function toPct(v: unknown): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : 0;
+  return Math.max(0, Math.min(100, n));
 }

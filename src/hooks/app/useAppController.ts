@@ -3,6 +3,11 @@ import { startLaunchGame } from "../../game/main";
 import { getBinding, isRebindingActive, isConsoleOpenActive } from "../../ui/input/KeyBindings";
 import { useGameStore } from "../../app/store/useGameStore";
 import { fetchPlayer } from "../../app/api/player.api";
+import {
+  getPlayerNeedsCache,
+  refreshPlayerNeeds,
+  subscribePlayerNeeds,
+} from "../inventory/playerInventoryStore";
 import { setActiveSeed, ensureWorldTiles, getTileGid } from "../../game/world/WorldTiles";
 import { invalidateMinimapBase } from "../hud/useMiniMap";
 import { terrainHeightManager } from "../../game/world/TerrainHeight";
@@ -199,35 +204,38 @@ export function useAppController() {
       if (playerId) {
         try {
           const dto = await fetchPlayer(playerId);
-          setCharacterData({
-            id: dto.id,
-            name: dto.username || "Señor Feudal",
-            profession: "Gobernante",
-            loyalty: 100,
-            health: 100,
-            isPlayer: true,
-            email: dto.email,
-            username: dto.username,
-            settings: dto.settings,
-            createdAt: dto.createdAt,
-            edad: 28,
-            attributes: {
-              strength: 15,
-              agility: 14,
-              endurance: 16,
-              intelligence: 18,
-              charisma: 20,
-              perception: 16,
-            },
-            needs: {
+          // Saciedad real: el backend (/player/me/needs) es la autoridad.
+          // Sin valores inventados: se toma lo ya sincronizado en el store y,
+          // si el fetch tardó, NO se pisan los valores publicados entretanto
+          // (un "usar Pan" en esa ventana debe sobrevivir a esta hidratación).
+          setCharacterData((prev) => {
+            const live = getPlayerNeedsCache();
+            const prevNeeds = (prev as any)?.needs as { hunger?: number; thirst?: number } | undefined;
+            const hunger = live?.hunger ?? prevNeeds?.hunger ?? 0;
+            const thirst = live?.thirst ?? prevNeeds?.thirst ?? 0;
+            return {
+              id: dto.id,
+              name: dto.username || "Señor Feudal",
+              profession: "Gobernante",
+              loyalty: 100,
               health: 100,
-              hunger: 20,
-              thirst: 15,
-              fatigue: 10,
-              sanity: 100,
-              safety: 100,
-            },
-          } as NpcPanelData);
+              isPlayer: true,
+              email: dto.email,
+              username: dto.username,
+              settings: dto.settings,
+              createdAt: dto.createdAt,
+              edad: 28,
+              attributes: {
+                strength: 15,
+                agility: 14,
+                endurance: 16,
+                intelligence: 18,
+                charisma: 20,
+                perception: 16,
+              },
+              needs: { hunger, thirst },
+            } as unknown as NpcPanelData;
+          });
         } catch {
           setCharacterData({
             id: playerId,
@@ -253,6 +261,39 @@ export function useAppController() {
       }
     };
     load();
+  }, [isAuthed]);
+
+  // Hambre/sed del jugador (autoridad: backend /player/me/needs).
+  // Fuente única: playerNeedsStore. Al usar un consumible el store publica el
+  // valor inmediato y luego converge con el refetch; aquí solo se refleja
+  // en el panel del personaje + polling cada 20s (decaimiento 5h).
+  useEffect(() => {
+    if (!isAuthed) return;
+    const applyNeeds = (hunger: number, thirst: number) => {
+      setCharacterData((prev) => {
+        if (!prev) return prev;
+        const prevNeeds = (prev as any).needs ?? {};
+        return {
+          ...prev,
+          needs: {
+            ...prevNeeds,
+            hunger: Math.max(0, Math.min(100, Math.round(hunger))),
+            thirst: Math.max(0, Math.min(100, Math.round(thirst))),
+          },
+        } as NpcPanelData;
+      });
+    };
+    const cached = getPlayerNeedsCache();
+    if (cached) applyNeeds(cached.hunger, cached.thirst);
+    const unsub = subscribePlayerNeeds((n) => applyNeeds(n.hunger, n.thirst));
+    void refreshPlayerNeeds();
+    const timer = window.setInterval(() => {
+      void refreshPlayerNeeds();
+    }, 20000);
+    return () => {
+      unsub();
+      window.clearInterval(timer);
+    };
   }, [isAuthed]);
 
   // Sincronización de selectedId de Zustand a selectedNPC

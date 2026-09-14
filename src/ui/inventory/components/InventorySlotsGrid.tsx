@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { type ItemCategory, type PlayerInventoryItem } from "../../../items/Item";
+import { describeConsumableEffect } from "../../../items/Consumables";
 import { CATEGORY_ICON } from "../../../hooks/inventory/usePlayerInventory";
 import { removeItemRemote, activateItemRemote } from "../../../hooks/inventory/playerInventoryStore";
 
@@ -324,6 +325,11 @@ export function InventorySlotsGrid({
               <div style={{ borderTop: '1px solid #333', padding: '7px 9px', display: 'flex', flexDirection: 'column', gap: 3, background: '#191919' }}>
                 <div style={{ fontSize: 9, color: '#888' }}>Categoría: <b style={{ color: '#ccc' }}>{selected.categoria}</b></div>
                 <div style={{ fontSize: 9, color: '#888' }}>Cantidad: <b style={{ color: '#ccc' }}>x{selected.cantidad}{selected.stackable ? ` (máx ${selected.maxStack})` : " (no acumulable)"}</b></div>
+                {selected && describeConsumableEffect(selected.nombre) && (
+                  <div style={{ fontSize: 9, color: '#8fd694', lineHeight: 1.35 }}>
+                    🍽️ {describeConsumableEffect(selected.nombre!)}
+                  </div>
+                )}
                 <div style={{ fontSize: 9, color: '#999', lineHeight: 1.35 }}>
                   {selected.descripcion ?? "Sin descripción."}
                 </div>

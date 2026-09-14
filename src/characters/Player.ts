@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { CombatSystem } from "../combat/CombatSystem";
 import { BaseHuman, BASE_HUMAN_ORIGIN_Y } from "./BaseHuman";
+import { Needs } from "./Needs";
 import type { Direction8 } from "./Animations";
 import * as InputSystem from "../game/systems/InputSystem";
 import { isGameInputBlocked } from "../ui/input/KeyBindings";
@@ -15,6 +16,8 @@ export const PLAYER_MAX_SALUD = 200;
 export class Player extends BaseHuman {
   public salud: number = PLAYER_MAX_SALUD;
   public maxSalud: number = PLAYER_MAX_SALUD;
+  /** Hambre/sed funcionales (0 = saciado, 100 = hambriento). Autoridad: backend /player/me/needs. */
+  public needs: Needs = new Needs({ hambre: 0, sed: 0, sueno: 0 });
   private isDead = false;
   private isJumping = false;
   private isDashing = false;
@@ -193,6 +196,18 @@ export class Player extends BaseHuman {
 
   updateEntity() {
     const body = this.body as Phaser.Physics.Arcade.Body;
+    // Necesidades funcionales (predicción local 20%/h = 100% en 5h; GodMode las congela).
+    try {
+      const god = (window as any).__GOD_MODE__ === true;
+      if (!god && !this.isDead) {
+        const dt = Math.max(0, Math.min(5, this.scene.game.loop.delta / 1000));
+        this.needs.simularNecesidades(dt > 0 ? dt : 1 / 60);
+      } else if (god && (this.needs.hambre !== 0 || this.needs.sed !== 0)) {
+        this.needs.syncFromServer(0, 0);
+      }
+    } catch {
+      // nunca romper el frame por necesidades
+    }
     // Muerto: quieto hasta el respawn (MainScene lo reaparece)
     if (this.isDead) {
       body.setVelocity(0);
@@ -291,6 +306,15 @@ export class Player extends BaseHuman {
 
   get estaVivo(): boolean {
     return !this.isDead && this.salud > 0;
+  }
+
+  /** Sincroniza hambre/sed autoritativas del servidor (GET /player/me/needs o POST use). */
+  syncNeedsFromServer(hunger: number, thirst: number) {
+    try {
+      this.needs.syncFromServer(hunger, thirst);
+    } catch {
+      // ignora payload corrupto
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import { useNpcPanel, type NpcPanelData, type NpcTab } from "../../hooks/character/useNpcPanel";
+import { useNpcPanel, type NpcPanelData } from "../../hooks/character/useNpcPanel";
 import { NpcStatusTab } from "./components/NpcStatusTab";
 import { NpcAttributesTab } from "./components/NpcAttributesTab";
 import { NpcProfessionsTab } from "./components/NpcProfessionsTab";
@@ -9,12 +9,6 @@ interface Props {
   npc: NpcPanelData;
   onClose: () => void;
 }
-
-const TABS: { id: NpcTab; label: string }[] = [
-  { id: "estado", label: "Estado" },
-  { id: "atributos", label: "Atributos" },
-  { id: "profesiones", label: "Profesiones" },
-];
 
 export function NpcPanel({ npc, onClose }: Props) {
   const {
@@ -29,8 +23,18 @@ export function NpcPanel({ npc, onClose }: Props) {
     hunger,
     thirst,
     fatigue,
+    satiety,
+    hydration,
     formattedLvy,
   } = useNpcPanel(npc);
+  const isPlayer = !!npc.isPlayer;
+
+  const TABS = [
+    { id: "estado", label: "Estado" },
+    ...(isPlayer ? [] : [{ id: "inventario", label: "Inventario" }]),
+    { id: "atributos", label: "Atributos" },
+    { id: "profesiones", label: "Profesiones" },
+  ];
 
   return (
     <div style={{
@@ -106,12 +110,18 @@ export function NpcPanel({ npc, onClose }: Props) {
             <div style={{ width: `${Math.min(100, Math.round((displayHealth / maxHealth) * 100))}%`, background: displayHealth > 60 ? '#4caf50' : displayHealth > 20 ? '#ff9800' : '#e53935', height: '100%', borderRadius: 4 }} />
           </div>
 
-          {isCore && (
+          {isCore && !isPlayer && (
             <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 10 }}>
               <div>Hambre {hunger}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${hunger}%`, background: hunger > 80 ? '#e53935' : '#ff9800', height: '100%' }} /></div></div>
               <div>Sed {thirst}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${thirst}%`, background: thirst > 80 ? '#e53935' : '#29b6f6', height: '100%' }} /></div></div>
               <div>Fatiga {fatigue}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${fatigue}%`, background: '#ab47bc', height: '100%' }} /></div></div>
-              <div>Cordura {npc.needs?.sanity ?? 100}%</div>
+              <div>Cordura {Math.max(0, Math.min(100, Math.round(npc.needs?.sanity ?? 100)))}%</div>
+            </div>
+          )}
+          {isPlayer && (
+            <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 10 }}>
+              <div>🍖 Saciedad {satiety}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${satiety}%`, background: satiety < 20 ? '#e53935' : '#ff9800', height: '100%' }} /></div></div>
+              <div>💧 Hidratación {hydration}%<div style={{ background: '#2a2a2a', height: 4, borderRadius: 2, overflow: 'hidden' }}><div style={{ width: `${hydration}%`, background: hydration < 20 ? '#e53935' : '#29b6f6', height: '100%' }} /></div></div>
             </div>
           )}
         </div>
@@ -122,7 +132,7 @@ export function NpcPanel({ npc, onClose }: Props) {
         {TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => setTab(t.id as any)}
             style={{
               flex: '1 1 0',
               minWidth: 0,
@@ -161,6 +171,84 @@ export function NpcPanel({ npc, onClose }: Props) {
         {tab === "estado" && <NpcStatusTab npc={npc} isCore={isCore} />}
         {tab === "atributos" && <NpcAttributesTab npc={npc} isCore={isCore} />}
         {tab === "profesiones" && <NpcProfessionsTab npc={npc} isCore={isCore} />}
+        {tab === "inventario" && (
+          <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+            <div style={{ marginBottom: 10 }}>
+              <b style={{ color: '#8ab4ff' }}>⚔️ Equipado</b>
+              <div style={{ marginTop: 6, background: '#1c1c1c', padding: 8, borderRadius: 8, border: '1px solid #2e2e2e' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                  {[
+                    { icon: '⚔️', label: 'Arma' },
+                    { icon: '🛡️', label: 'Escudo' },
+                    { icon: '⛑️', label: 'Casco' },
+                    { icon: '🦺', label: 'Pecho' },
+                    { icon: '👢', label: 'Botas' },
+                    { icon: '📿', label: 'Collar' },
+                    { icon: '💍', label: 'Anillo' },
+                    { icon: '🧪', label: 'Consum.' },
+                    { icon: '🎒', label: 'Mochila' },
+                    { icon: '✨', label: '—' },
+                  ].map((s, i) => (
+                    <div key={i} style={{ aspectRatio: '1', background: '#252525', border: '1px solid #333', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+                      <div style={{ fontSize: 13 }}>{s.icon}</div>
+                      <div style={{ fontSize: 6, color: '#888' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 10, color: '#aaa' }}>
+                  {(npc as any).equipamiento?.length ? (npc as any).equipamiento.join(' • ') : '— Sin equipamiento —'}
+                </div>
+              </div>
+            </div>
+            <div>
+              <b style={{ color: '#8ab4ff' }}>🎒 Inventario</b>
+              <div style={{ marginTop: 6, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4 }}>
+                  {Array.from({ length: 50 }).map((_, i) => {
+                    const items = (npc as any).inventario ?? [];
+                    const it = items[i];
+                    const isLocked = i >= 20;
+                    return (
+                      <div
+                        key={i}
+                        title={it ?? (isLocked ? 'Bloqueado - requiere mochila' : '')}
+                        style={{
+                          aspectRatio: '1',
+                          minWidth: 0,
+                          background: isLocked ? '#0f0f0f' : it ? '#252525' : '#1e1e1e',
+                          border: isLocked ? '1px dashed #333' : it ? '1px solid #3a3a3a' : '1px solid #2a2a2a',
+                          borderRadius: 4,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 2,
+                          opacity: isLocked ? 0.5 : 1,
+                        }}
+                      >
+                        {isLocked ? (
+                          <span style={{ fontSize: 10, opacity: 0.7 }}>🔒</span>
+                        ) : it ? (
+                          <>
+                            <div style={{ fontSize: 10, lineHeight: 1 }}>{it.split(' ')[0]?.[0] ?? '?'}</div>
+                            <div style={{ fontSize: 6, color: '#fff', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                              {it.slice(0, 5)}
+                            </div>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 10, color: '#444' }}>·</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 6, fontSize: 8, color: '#555', justifyContent: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+                  <span>20 libres • 30 bloqueados</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

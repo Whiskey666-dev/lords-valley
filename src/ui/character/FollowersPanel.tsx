@@ -145,12 +145,29 @@ export function FollowersPanel({ onClose }: Props) {
                   </div>
                 </div>
 
-                {/* Fila inferior: Posición + Botón Ver */}
+                {/* Fila inferior: Posición + Botones */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#666', marginTop: 2 }}>
                   <span>📍 {posX}, {posY}</span>
-                  <span style={{ color: '#00ff88', fontSize: 10, fontWeight: 700 }}>
-                    👁️ Ver NPC →
-                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectAndFocusNpc(npc);
+                      }}
+                      style={{ background: 'transparent', border: '1px solid #2a2a2a', color: '#00ff88', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      👁️ Ver
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Órdenes (placeholder, sin funcionalidad todavía)
+                      }}
+                      style={{ background: 'transparent', border: '1px solid #2a2a2a', color: '#ffd66b', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      🧭 Órdenes
+                    </button>
+                  </div>
                 </div>
               </div>
             );

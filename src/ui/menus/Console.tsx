@@ -114,7 +114,7 @@ export function Console() {
             // @ts-ignore
             if (e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
           }}
-          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "menu | spawnGhost2 | createNpc5 | addItem:Madera5 | GodModeOn | help | ENTER ejecutar"}
+          placeholder={mode === "chat" ? "Escribe un mensaje... ENTER para burbuja" : "menu | spawnGhost2 | createNpc5 | addItem:Comida/Pan5 | addItem:Bebida/OdreAgua3 | GodModeOn | help | ENTER ejecutar"}
           style={{
             flex: 1,
             background: "#1a1a1a",
@@ -164,7 +164,7 @@ export function Console() {
             <div key={i} style={{ opacity: 0.7 }}>{h}</div>
           ))}
           <div style={{ color: "#666" }}>
-            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: menu | spawnGhost2 | createNpc5 | addItem:Madera5 | GodModeOn"}
+            {mode === "chat" ? "Chat: mensaje aparece en burbuja sobre el personaje" : "Ej: menu | spawnGhost2 | createNpc5 | addItem:Comida/Pan5 | addItem:Bebida/OdreAgua3 | GodModeOn"}
           </div>
         </div>
       )}

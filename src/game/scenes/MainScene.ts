@@ -10,6 +10,7 @@ import * as InputSystem from "../systems/InputSystem";
 import { setupCamera, updateCamera } from "../systems/CameraSystem";
 import { getCenterSpawn, spawnNpcs, spawnDeadDragons, spawnGhosts, requestServerGhostSpawn, initCombatSocket, findSafeSpawnPos, clampToIsoWorld } from "../systems/SpawnSystem";
 import { ChatBubbleSystem } from "../systems/ChatBubbleSystem";
+import { NeedBubbleSystem } from "../systems/NeedBubbleSystem";
 import { CameraController } from "../systems/CameraController";
 import { findNearestSafeIsoPos, tileToIso, worldToIso, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT, ISO_TILE_H } from "../world/Terrain";
 import { collisionMatrix } from "../world/CollisionMatrix";
@@ -19,8 +20,9 @@ import { ChunkRenderer } from "../entities/ChunkRenderer";
 import { FarmPlacementSystem } from "../systems/FarmPlacementSystem";
 import { TerrainEditSystem } from "../systems/TerrainEditSystem";
 import { TerrainOcclusionSystem } from "../systems/TerrainOcclusionSystem";
-import { savePlayerPos } from "../../app/api/player.api";
-import { setGameMode as apiSetGameMode } from "../../app/api/settlement.api";
+import { savePlayerPos, fetchMyNeeds } from "../../app/api/player.api";
+import { setGameMode as apiSetGameMode, fetchSettlement } from "../../app/api/settlement.api";
+import { PLAYER_NEEDS_EVENT } from "../../hooks/inventory/playerInventoryStore";
 import { useGameStore } from "../../app/store/useGameStore";
 import { getSocket, getCombatSocket, reportGhostDamage, reportCombatHit, reportRespawn, playerEntityId } from "../../app/socket";
 import { CombatSystem } from "../../combat/CombatSystem";
@@ -38,6 +40,8 @@ export class MainScene extends Phaser.Scene {
   private deadDragons: DeadDragon[] = [];
   private ghosts: Ghost[] = [];
   private chatSystem!: ChatBubbleSystem;
+  /** Nubes flotantes 🍖/💧 sobre player y NPCs con hambre/sed >= 60. */
+  private needBubbles!: NeedBubbleSystem;
   private cameraController!: CameraController;
   private chunkRenderer!: ChunkRenderer;
   private staticGround!: StaticGroundLayer;
@@ -107,6 +111,8 @@ export class MainScene extends Phaser.Scene {
       this.setupGhostListeners();
       this.restoreSavedGame();
       this.chatSystem = new ChatBubbleSystem(this);
+      this.needBubbles = new NeedBubbleSystem(this);
+      this.setupNeedsSync();
       this.farmPlacementSystem = new FarmPlacementSystem(this);
       this.terrainEditSystem = new TerrainEditSystem(this);
       void this.terrainEditSystem;
@@ -737,6 +743,90 @@ export class MainScene extends Phaser.Scene {
     };
   }
 
+  /**
+   * Sincronía autoritativa de hambre/sed:
+   * - Player: el backend es la autoridad (/player/me/needs, decaimiento 5h).
+   *   Se aplica al usar Pan/Odre (evento) + polling cada 20s para corregir deriva.
+   * - NPCs: el core es la autoridad (SimulationEngine 5h). Se corrige cada 60s
+   *   desde el settlement. Entre polls, el cliente predice (Needs.tick) y los
+   *   NPC auto-comen Pan localmente.
+   */
+  private setupNeedsSync(): void {
+    const onNeedsChanged = (e: Event) => {
+      if (!this.sceneAlive || !this.player) return;
+      const detail = (e as CustomEvent<{ hunger: number; thirst: number }>).detail;
+      if (typeof detail?.hunger === "number" && typeof detail?.thirst === "number") {
+        this.player.syncNeedsFromServer(detail.hunger, detail.thirst);
+      }
+    };
+    window.addEventListener(PLAYER_NEEDS_EVENT, onNeedsChanged as EventListener);
+
+    // Estado inicial del servidor (corrige la predicción local al entrar)
+    fetchMyNeeds().then(
+      (n) => {
+        if (this.sceneAlive && this.player && typeof n?.hunger === "number") {
+          this.player.syncNeedsFromServer(n.hunger, n.thirst);
+        }
+      },
+      () => {},
+    );
+
+    // Polling player cada 20s (deriva del decaimiento 5h)
+    const playerTimer = this.time.addEvent({
+      delay: 20000,
+      loop: true,
+      callback: () => {
+        if (!this.sceneAlive || !this.player) return;
+        fetchMyNeeds().then(
+          (n) => {
+            if (this.sceneAlive && this.player && typeof n?.hunger === "number") {
+              this.player.syncNeedsFromServer(n.hunger, n.thirst);
+            }
+          },
+          () => {},
+        );
+      },
+    });
+
+    // Polling NPCs cada 60s desde el settlement (autoridad del core)
+    const npcTimer = this.time.addEvent({
+      delay: 60000,
+      loop: true,
+      callback: () => {
+        if (!this.sceneAlive || this.npcs.length === 0) return;
+        const sid = this.settlementId ?? (window as any).__SETTLEMENT_ID__ ?? null;
+        if (!sid) return;
+        fetchSettlement(sid).then(
+          (s) => {
+            if (!this.sceneAlive || !Array.isArray(s?.survivors)) return;
+            const byId = new Map((s.survivors as any[]).map((sv: any) => [sv?.id, sv]));
+            for (const npc of this.npcs) {
+              const srv = byId.get(npc.id) as any;
+              const needs = srv?.needs;
+              if (needs && typeof needs.hunger === "number" && typeof needs.thirst === "number") {
+                npc.needs.syncFromServer(needs.hunger, needs.thirst, needs.fatigue);
+              }
+            }
+          },
+          () => {},
+        );
+      },
+    });
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener(PLAYER_NEEDS_EVENT, onNeedsChanged as EventListener);
+      try {
+        playerTimer.destroy();
+      } catch {}
+      try {
+        npcTimer.destroy();
+      } catch {}
+      try {
+        this.needBubbles?.destroy();
+      } catch {}
+    });
+  }
+
   private setupWorld(): void {
     this.physics.world.setBounds(0, 0, ISO_WORLD_WIDTH, ISO_WORLD_HEIGHT);
     this.cameras.main.setBackgroundColor("#111a11");
@@ -1070,7 +1160,7 @@ export class MainScene extends Phaser.Scene {
         this.player.updateEntity();
       }
       this.npcs = this.npcs.filter(n => n.estaVivo);
-      this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons));
+      this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons, delta));
       this.deadDragons = this.deadDragons.filter(d => d.estaVivo);
       this.deadDragons.forEach(d => d.updateEntity(this.buildDragonCtx()));
       this.ghosts = this.ghosts.filter(g => g.estaVivo);
@@ -1080,6 +1170,9 @@ export class MainScene extends Phaser.Scene {
         delta
       ));
       this.chatSystem.update(this.player);
+      try {
+        this.needBubbles?.update(this.player, this.npcs);
+      } catch {}
       if (this.terrainOcclusionSystem && this.player) {
         this.terrainOcclusionSystem.update(this.player);
       }
@@ -1117,7 +1210,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     this.npcs = this.npcs.filter(n => n.estaVivo);
-    this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons));
+    this.npcs.forEach(n => n.updateEntity(this.ghosts, this.deadDragons, delta));
     const npcPositions = this.npcs
       .filter(n => n.sprite && n.sprite.active)
       .map(n => ({
@@ -1158,6 +1251,9 @@ export class MainScene extends Phaser.Scene {
     (window as any).__DEAD_DRAGON_COUNT__ = this.deadDragons.length;
 
     this.chatSystem.update(this.player);
+    try {
+      this.needBubbles?.update(this.player, this.npcs);
+    } catch {}
     if (this.terrainOcclusionSystem && this.player) {
       this.terrainOcclusionSystem.update(this.player);
     }

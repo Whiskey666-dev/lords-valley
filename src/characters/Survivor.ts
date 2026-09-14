@@ -10,6 +10,7 @@ import { Personality } from './Personality';
 import { Skills } from './Skills';
 import { Gustos } from './Gustos';
 import { Inventory } from '../items/Inventory';
+import { getConsumableEffect } from '../items/Consumables';
 import { Equipment } from '../items/Equipment';
 import { reportCombatHit } from '../app/socket';
 
@@ -17,6 +18,12 @@ import { reportCombatHit } from '../app/socket';
 const SURVIVOR_DEFENSE_RANGE = 70;
 /** Cooldown local entre golpes (el servidor aplica el suyo: 1500ms) */
 const SURVIVOR_DEFENSE_COOLDOWN = 1500;
+
+/** Porcentaje entero 0-100 sin decimales para mostrar en paneles. */
+function pct(v: unknown): number {
+    const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : 0;
+    return Math.max(0, Math.min(100, n));
+}
 
 /** Objetivo de combate (forma estructural: evita imports circulares con Ghost/DeadDragon) */
 export interface CombatTargetLike {
@@ -146,6 +153,32 @@ export class Survivor {
         if (typeof serverData.loyalty === 'number') {
             surv.loyalty.nivel = serverData.loyalty;
         }
+        // Inventario autoritativo del servidor: PAN/ODRE_AGUA (cantidades BigInt x10^18)
+        // a unidades locales. Si el servidor no trae, se conserva la dotación 10/10.
+        try {
+            const inv = Array.isArray(serverData.inventory) ? serverData.inventory : [];
+            let pan: number | null = null;
+            let odre: number | null = null;
+            let odreVacio = 0;
+            for (const r of inv) {
+                const type = String((r as any)?.type ?? '').toUpperCase();
+                let units = 0;
+                try {
+                    units = Number(BigInt(String((r as any)?.quantity ?? '0')) / BigInt(10) ** BigInt(18));
+                } catch {
+                    units = Math.max(0, Math.floor(Number((r as any)?.quantity ?? 0)));
+                }
+                if (!Number.isFinite(units) || units < 0) units = 0;
+                if (type === 'PAN') pan = (pan ?? 0) + Math.floor(units);
+                else if (type === 'ODRE_AGUA') odre = (odre ?? 0) + Math.floor(units);
+                else if (type === 'ODRE_VACIO') odreVacio += Math.floor(units);
+            }
+            if (pan !== null) surv.inventory.setCount('Pan', 'comida', pan);
+            if (odre !== null) surv.inventory.setCount('Odre con Agua', 'comida', odre);
+            if (odreVacio > 0) surv.inventory.setCount('Odre vacío', 'comida', odreVacio);
+        } catch {
+            // conserva la dotación del constructor
+        }
         return surv;
     }
 
@@ -199,7 +232,8 @@ export class Survivor {
             equipamiento: this.equipment.getResumen(),
             habilidades: Object.entries(this.skills.niveles).map(([k, v]) => `${k}: Lv${v}`),
             stats: { salud: this.stats.salud, maxSalud: this.stats.maxSalud, energia: this.stats.energia, maxEnergia: this.stats.maxEnergia },
-            needs: { hambre: this.needs.hambre, sed: this.needs.sed, sueno: this.needs.sueno },
+            // Porcentajes enteros 0-100 (sin decimales) para los paneles
+            needs: { hambre: pct(this.needs.hambre), sed: pct(this.needs.sed), sueno: pct(this.needs.sueno) },
             nombre: this.nombre,
             profesion: this.profesion,
             lealtadNivel: this.loyalty.nivel,
@@ -275,8 +309,20 @@ export class Survivor {
         window.dispatchEvent(new CustomEvent('phaser-npc-died' as any, { detail: { id: this.id } }));
     }
 
-    updateEntity(ghosts?: CombatTargetLike[], deadDragons?: CombatTargetLike[]) {
+    updateEntity(ghosts?: CombatTargetLike[], deadDragons?: CombatTargetLike[], deltaMs?: number) {
         if (!this.sprite || this.isDead) return;
+        // Necesidades funcionales (predicción local; el servidor es la autoridad):
+        // 20%/h -> 100% en 5h. Auto-consumo heredado de Consumables.ts.
+        try {
+            const dt = typeof deltaMs === "number" && Number.isFinite(deltaMs)
+                ? Math.max(0, Math.min(5, deltaMs / 1000))
+                : 1 / 60;
+            this.needs.simularNecesidades(dt);
+            if (this.needs.necesitaComer) this.autoConsume("hunger");
+            if (this.needs.necesitaBeber) this.autoConsume("thirst");
+        } catch {
+            // nunca romper el frame por necesidades/inventario
+        }
         if (this.sprite.body) {
             // Barras en porcentaje sobre los máximos
             this.sprite.syncBars(this.stats.salud, this.stats.maxSalud, this.stats.energia, this.stats.maxEnergia);
@@ -373,5 +419,25 @@ export class Survivor {
         if (!this.sprite || this.isJumping || this.isDashing) return;
         const dir = this.sprite.getLastDirection();
         CombatSystem.executeAttack(this.sprite, dir, "npc_");
+    }
+
+    /**
+     * Auto-consumo heredado de Consumables.ts: consume 1 unidad del PRIMER
+     * item del inventario cuyo efecto cubra la necesidad (hunger/thirst) y
+     * aplica sus puntos (+ envase si emptiesTo). Los items nuevos lo heredan.
+     */
+    public autoConsume(kind: "hunger" | "thirst"): boolean {
+        for (const it of this.inventory.items) {
+            if (!it || it.cantidad <= 0) continue;
+            const found = getConsumableEffect(it.nombre);
+            const amount = kind === "hunger" ? found?.effect.hunger : found?.effect.thirst;
+            if (!found || found.effect.notUsable || !amount || amount <= 0) continue;
+            if (!this.inventory.consumeOne(it.nombre)) continue;
+            if (kind === "hunger") this.needs.comerPan(amount);
+            else this.needs.beberOdre(amount);
+            if (found.effect.emptiesTo) this.inventory.addOne(found.effect.emptiesTo, "comida");
+            return true;
+        }
+        return false;
     }
 }
